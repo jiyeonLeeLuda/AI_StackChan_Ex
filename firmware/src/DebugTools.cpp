@@ -1,4 +1,5 @@
 #include <M5Unified.h>
+#include <Wire.h>
 #include "DebugTools.h"
 
 
@@ -89,6 +90,7 @@ void check_board(void)
     case m5gfx::board_t::board_M5StackCoreS3:
       Serial.println("Board:M5StackCoreS3");
       break;
+#if defined(LGFX_BOARD_HAS_CORES3SE)   // enums only exist in newer M5GFX
     case m5gfx::board_t::board_M5StackCoreS3SE:
       Serial.println("Board:M5StackCoreS3SE");
       break;
@@ -98,6 +100,7 @@ void check_board(void)
     case m5gfx::board_t::board_M5StackChan:
       Serial.println("Board:M5StackChan");
       break;
+#endif
     default:
       Serial.println("Board:Unknown");
       break;

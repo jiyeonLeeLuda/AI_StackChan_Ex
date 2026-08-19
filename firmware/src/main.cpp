@@ -583,13 +583,30 @@ void setup()
   bool sd_available = false;
 #if !defined(ARDUINO_M5STACK_ATOMS3R)
 #if defined(ARDUINO_M5STACK_CORES3)
-  // CoreS3 is built with the esp32s3box board variant, whose default SPI pins
-  // (SCK=12/MISO=13/MOSI=11) do not match CoreS3's SD card bus. Start the SPI
-  // bus explicitly with the CoreS3 pins (SCK=36, MISO=35, MOSI=37, CS=4)
-  // before SD.begin(); later spi.begin() calls inside SD.begin() are no-ops.
-  SPI.begin(GPIO_NUM_36, GPIO_NUM_35, GPIO_NUM_37, GPIO_NUM_4);
+  // On CoreS3 the TF card keeps its power across a soft reset (USB/reset
+  // button), and a card left mid-state stops answering CMD0
+  // (https://github.com/m5stack/M5CoreS3/issues/46 : works on power-up,
+  // fails after reset). Power-cycle the TF slot (AXP2101 ALDO4) so the card
+  // always cold-starts before SD.begin().
+  {
+    uint8_t reg90 = M5.Power.Axp2101.readRegister8(0x90);   // LDO enable ctrl0
+    M5.Power.Axp2101.writeRegister8(0x90, reg90 & ~0x08);   // ALDO4 (TF 3.3V) off
+    delay(100);
+    M5.Power.Axp2101.writeRegister8(0x95, 33 - 5);          // ALDO4 = 3.3V
+    M5.Power.Axp2101.writeRegister8(0x90, reg90 | 0x08);    // ALDO4 on
+    delay(100);
+  }
 #endif
   sd_available = SD.begin(GPIO_NUM_4, SPI, 25000000);
+#if defined(ARDUINO_M5STACK_CORES3)
+  if(!sd_available){
+    // Retry once at a conservative clock; some cards need a slower init.
+    SD.end();
+    delay(500);
+    sd_available = SD.begin(GPIO_NUM_4, SPI, 4000000);
+    Serial.printf("SD retry at 4MHz: %s\n", sd_available ? "OK" : "NG");
+  }
+#endif
 #endif
   bool full_config_loaded = load_system_config(sd_available);
 
@@ -765,7 +782,9 @@ void loop()
       mod->display_touched(t.x, t.y);
     }
 
-    if (t.wasFlicked())
+    // M5Unified 0.1.x has no wasFlicked(); approximate a flick as a released
+    // touch that travelled far enough. (KR fork: pinned to 0.1.7 for CoreS3 SD)
+    if (t.wasReleased() && (abs(t.distanceX()) >= 60 || abs(t.distanceY()) >= 60))
     {
       int16_t dx = t.distanceX();
       int16_t dy = t.distanceY();

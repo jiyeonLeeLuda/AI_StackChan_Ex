@@ -2,6 +2,7 @@
 #define _DEBUG_TOOLS_H
 
 #include <M5Unified.h>
+#include <Wire.h>
 
 /// 関数プロトタイプ宣言 /// 
 void check_heap_free_size(void);
