@@ -27,6 +27,7 @@
 #include "driver/Audio.h"              //speechToText
 #include "driver/HeadTouchSensor.h"
 #include "mod/AiStackChan/MirrorState.h"
+#include "mod/AiStackChan/Reaction.h"
 
 using namespace m5avatar;
 
@@ -86,6 +87,13 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
     if(MirrorState::isToggleCommand(ret)){
       MirrorState::toggle();
       avatar.setExpression(Expression::Neutral);
+      servo_home = true;
+      return;
+    }
+    // Reaction keywords ("빵야", "훅"...) trigger a canned sequence instead
+    // of the LLM. Voice fires first; camera confirmation comes later.
+    if(const Reaction* reaction = matchReaction(ret)){
+      playReaction(*reaction);
       servo_home = true;
       return;
     }
