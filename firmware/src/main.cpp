@@ -2,6 +2,7 @@
 //#include <FS.h>
 #include <SD.h>
 #include <SPI.h>
+#include <WiFi.h>
 #include <SPIFFS.h>
 #include "share/Version.h"
 #include "share/Mutex.h"
@@ -525,6 +526,44 @@ void init_mic_spk()
   //M5.Speaker.begin();
 }
 
+#if defined(ARDUINO_M5STACK_CORES3)
+// CoreS3: the LCD and TF card share one SPI bus (SCK36/MISO35/MOSI37) and the
+// LCD D/C doubles as MISO (GPIO35). After M5GFX's autodetect the TF CS (GPIO4)
+// is left floating, so later LCD traffic can clock garbage into the card and
+// knock it out of SPI mode; SD.begin() then fails (f_mount error 3 /
+// sdSelectCard Select Failed). Re-prime the card into SPI mode right before
+// SD.begin(). Ported from M5GFX's _set_sd_spimode()/_send_sd_dummy_clock()
+// (M5GFX (c) M5Stack, MIT license).
+static void cores3_sd_send_dummy_clock(void){
+  static constexpr uint8_t dummy_clock[16] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
+                                              0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+  digitalWrite(GPIO_NUM_4, HIGH);
+  m5gfx::spi::writeBytes(SPI2_HOST, dummy_clock, sizeof(dummy_clock));
+  digitalWrite(GPIO_NUM_4, LOW);
+}
+static void cores3_sd_prime(void){
+  pinMode(GPIO_NUM_4, OUTPUT);
+  digitalWrite(GPIO_NUM_4, HIGH);
+  m5gfx::spi::beginTransaction(SPI2_HOST, 400000, 0);
+  cores3_sd_send_dummy_clock();
+  uint8_t sd_cmd58[] = { 0x7A, 0, 0, 0, 0, 0xFD, 0xFF, 0xFF }; // READ_OCR
+  m5gfx::spi::readBytes(SPI2_HOST, sd_cmd58, sizeof(sd_cmd58));
+  if (sd_cmd58[6] == sd_cmd58[7]) { // no response -> not in SPI mode
+    cores3_sd_send_dummy_clock();
+    static constexpr uint8_t sd_cmd0[] = { 0x40, 0, 0, 0, 0, 0x95, 0xFF, 0xFF }; // GO_IDLE_STATE
+    m5gfx::spi::writeBytes(SPI2_HOST, sd_cmd0, sizeof(sd_cmd0));
+  }
+  digitalWrite(GPIO_NUM_4, HIGH);
+  m5gfx::spi::endTransaction(SPI2_HOST);
+  pinMode(GPIO_NUM_4, INPUT_PULLUP);  // keep CS deselected while the bus carries LCD traffic
+  // GPIO35 doubles as LCD D/C (output) and SD MISO (input). If LGFX left the
+  // pin driving as D/C, every SD read sees a stuck line ("Select Failed").
+  // Release it to input before talking to the card.
+  pinMode(GPIO_NUM_35, INPUT_PULLUP);
+}
+#endif
+
+
 void setup()
 {
   /// シリアル出力のログレベルを VERBOSEに設定
@@ -539,6 +578,31 @@ void setup()
 #endif
   cfg.serial_baudrate = 115200;   //M5Unified 0.1.17からデフォルトが0になったため設定
   M5.begin(cfg);
+
+  // KR fork: mount SD immediately after M5.begin, before other peripherals
+  // start using the shared bus.
+  bool sd_available = false;
+#if !defined(ARDUINO_M5STACK_ATOMS3R)
+#if defined(ARDUINO_M5STACK_CORES3)
+  // The shared LCD/SD bus makes the first mount flaky on CoreS3; retry with
+  // re-priming and progressively slower clocks.
+  {
+    const uint32_t freqs[] = {25000000, 25000000, 15000000, 4000000, 4000000};
+    for(int i = 0; i < 5 && !sd_available; i++){
+      cores3_sd_prime();
+      sd_available = SD.begin(GPIO_NUM_4, SPI, freqs[i]);
+      Serial.printf("SD mount try %d @%luHz: %s\n", i + 1,
+                    (unsigned long)freqs[i], sd_available ? "OK" : "NG");
+      if(!sd_available){
+        SD.end();
+        delay(300);
+      }
+    }
+  }
+#else
+  sd_available = SD.begin(GPIO_NUM_4, SPI, 25000000);
+#endif
+#endif
 
   ///// Debug /////
 #if 0
@@ -580,34 +644,6 @@ void setup()
     ESP.restart();
   }
 
-  bool sd_available = false;
-#if !defined(ARDUINO_M5STACK_ATOMS3R)
-#if defined(ARDUINO_M5STACK_CORES3)
-  // On CoreS3 the TF card keeps its power across a soft reset (USB/reset
-  // button), and a card left mid-state stops answering CMD0
-  // (https://github.com/m5stack/M5CoreS3/issues/46 : works on power-up,
-  // fails after reset). Power-cycle the TF slot (AXP2101 ALDO4) so the card
-  // always cold-starts before SD.begin().
-  {
-    uint8_t reg90 = M5.Power.Axp2101.readRegister8(0x90);   // LDO enable ctrl0
-    M5.Power.Axp2101.writeRegister8(0x90, reg90 & ~0x08);   // ALDO4 (TF 3.3V) off
-    delay(100);
-    M5.Power.Axp2101.writeRegister8(0x95, 33 - 5);          // ALDO4 = 3.3V
-    M5.Power.Axp2101.writeRegister8(0x90, reg90 | 0x08);    // ALDO4 on
-    delay(100);
-  }
-#endif
-  sd_available = SD.begin(GPIO_NUM_4, SPI, 25000000);
-#if defined(ARDUINO_M5STACK_CORES3)
-  if(!sd_available){
-    // Retry once at a conservative clock; some cards need a slower init.
-    SD.end();
-    delay(500);
-    sd_available = SD.begin(GPIO_NUM_4, SPI, 4000000);
-    Serial.printf("SD retry at 4MHz: %s\n", sd_available ? "OK" : "NG");
-  }
-#endif
-#endif
   bool full_config_loaded = load_system_config(sd_available);
 
   // Wifi設定読み込み
@@ -643,6 +679,7 @@ void setup()
 
   if(connect_wifi_from_yaml(wifi_info)){
     Serial.println("Successfully connected to Wi-Fi using YAML settings.");
+    WiFi.setSleep(false);   // modem sleep makes ping/TCP unreliable on some routers
   }else{
     WifiFallbackMode fallback = select_wifi_fallback_mode();
     if(fallback == WifiFallbackMode::ConfigAp){

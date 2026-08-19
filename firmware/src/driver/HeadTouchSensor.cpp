@@ -83,6 +83,12 @@ void begin(void)
   }
   initTried = true;
 
+  // KR fork: the Si12T head-touch sensor is only present on the official
+  // M5Stack Stack-chan unit, and M5Unified 0.1.7's In_I2C.scanID() blocks
+  // forever on a bare CoreS3 (this hung the whole main loop). Skip init;
+  // update()/isAvailable() then report the sensor as absent.
+  return;
+
   si12t_config_t config = {};
   config.i2c = &M5.In_I2C;
   config.dev_addr = SI12T_GND_ADDRESS;
