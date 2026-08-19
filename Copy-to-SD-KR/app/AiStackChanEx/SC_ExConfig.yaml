@@ -1,0 +1,48 @@
+## 앱 고유 설정 파일 — 한국어 대화 프리셋
+#
+# SD카드의  /app/AiStackChanEx/SC_ExConfig.yaml  경로에 둡니다.
+#
+# 이 프리셋은 OpenAI API 키 하나로 대화 전체(음성인식 → 대화 → 음성합성)를
+# 한국어로 처리하도록 구성돼 있습니다.
+#   STT  : OpenAI Whisper   (한국어 인식)
+#   LLM  : OpenAI ChatGPT   (한국어 응답. 기본 role이 한국어로 설정돼 있음)
+#   TTS  : OpenAI TTS       (한국어 음성 재생)
+
+llm:
+  type: 0                            # 0:ChatGPT  1:ModuleLLM  2:ModuleLLM(Function Calling)  3:Gemini(Realtime)  4:OpenAI 호환 엔드포인트
+  model: ""                          # 비워두면 gpt-4o 사용. 다른 모델을 쓰려면 모델명을 적습니다.
+  #model: "gpt-4o-mini"              # 예: 더 저렴한 모델로 바꾸는 경우
+  enableMemory: false                # true로 하면 대화 중 사용자 정보를 장기기억(SPIFFS)에 저장
+
+tts:
+  type: 2                            # 0:VOICEVOX  1:ElevenLabs  2:OpenAI TTS  3:AquesTalk  4:ModuleLLM
+                                     #   -> 한국어는 2(OpenAI TTS)를 사용합니다.
+                                     #      VOICEVOX/AquesTalk은 일본어 전용이라 한국어를 읽지 못합니다.
+  model: "gpt-4o-mini-tts"           # OpenAI TTS 모델. 저지연을 원하면 "tts-1", 품질 우선은 "tts-1-hd"
+  voice: "alloy"                     # alloy / echo / fable / onyx / nova / shimmer 등
+                                     #   OpenAI TTS는 입력 텍스트의 언어를 따라 발음하므로
+                                     #   한국어 텍스트를 넣으면 한국어로 읽습니다.
+
+stt:
+  type: 1                            # 0:Google STT  1:OpenAI Whisper  2:ModuleLLM(ASR)  3:ModuleLLM(Whisper)
+                                     #   -> OpenAI 키를 그대로 쓰기 위해 1(Whisper)을 사용합니다.
+  model: ""                          # ModuleLLM(Whisper) 전용. OpenAI Whisper에서는 사용되지 않습니다.
+  language: "ko-KR"                  # 인식 언어 (BCP-47).
+                                     #   OpenAI Whisper에는 앞의 "ko"만 잘라서 전달되고,
+                                     #   Google STT에는 "ko-KR" 그대로 전달됩니다.
+                                     #   비워두면 "ko-KR"이 기본값으로 적용됩니다.
+
+wakeword:
+  type: 0                            # 0:SimpleVox  1:ModuleLLM(KWS)
+  keyword: ""                        # SimpleVox는 YAML로 등록 불가. 실행 후 B버튼 길게 눌러 직접 녹음 등록.
+
+audio:
+  speaker_volume: 0                  # 0이면 펌웨어 기본값 사용 (CoreS3: 120). 1~255로 직접 지정 가능.
+
+# ModuleLLM (이 프리셋에서는 사용하지 않음)
+moduleLLM:
+  # Serial Pin
+  # Core2  Rx:13, Tx:14
+  # CoreS3 Rx:18, Tx:17
+  rxPin: 18
+  txPin: 17
