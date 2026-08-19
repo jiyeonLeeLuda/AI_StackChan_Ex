@@ -23,8 +23,23 @@ void poll(void) {}
 
 #else
 
+// The slow HTTPS round-trip runs in a background task so the main loop keeps
+// updating the camera preview and touch input. The main loop only does the
+// fast parts: grabbing/encoding a frame and applying the classified result.
+//
+//   main loop poll():  IDLE --capture+encode--> REQUESTED
+//   worker task:       REQUESTED --HTTPS--> RESULT_READY (or IDLE on error)
+//   main loop poll():  RESULT_READY --apply expression/reaction--> IDLE
+
 static constexpr uint32_t POLL_INTERVAL_MS = 2500;
 static constexpr const char* VISION_MODEL = "gpt-4o-mini";
+
+enum class State : uint8_t { Idle, Requested, Busy, ResultReady };
+static volatile State state = State::Idle;
+static String frameB64;        // main -> worker
+static String resExpression;   // worker -> main
+static String resGesture;      // worker -> main
+static TaskHandle_t visionTask = nullptr;
 
 static const char* PROMPT =
   "You are the eyes of a small robot. Look at the person in the image and "
@@ -33,16 +48,10 @@ static const char* PROMPT =
   "\"gesture\":\"wink|blow_kiss|finger_gun|wave|hand_heart|none\"}. "
   "Pick the single most likely value for each.";
 
-// One vision round-trip: capture -> classify -> {expression, gesture}
-static bool classifyFrame(String& expression, String& gesture){
-  String b64;
-  if (!camera_capture_base64(b64) || b64.length() == 0) {
-    Serial.println("[MirrorVision] capture failed");
-    return false;
-  }
-
+// Runs in the worker task: HTTPS classify of frameB64.
+static bool classify(void){
   String body;
-  body.reserve(b64.length() + 900);
+  body.reserve(frameB64.length() + 900);
   body += "{\"model\":\"";
   body += VISION_MODEL;
   body += "\",\"max_tokens\":60,\"temperature\":0,"
@@ -51,8 +60,9 @@ static bool classifyFrame(String& expression, String& gesture){
   body += PROMPT;
   body += "\"},{\"type\":\"image_url\",\"image_url\":{\"url\":"
           "\"data:image/jpeg;base64,";
-  body += b64;
+  body += frameB64;
   body += "\",\"detail\":\"low\"}}]}]}";
+  frameB64 = String();  // free early
 
   WiFiClientSecure client;
   client.setCACert(root_ca_openai);
@@ -74,7 +84,6 @@ static bool classifyFrame(String& expression, String& gesture){
   String payload = https.getString();
   https.end();
 
-  // choices[0].message.content holds the small JSON answer
   DynamicJsonDocument doc(4096);
   StaticJsonDocument<256> filter;
   filter["choices"][0]["message"]["content"] = true;
@@ -93,10 +102,22 @@ static bool classifyFrame(String& expression, String& gesture){
   if (deserializeJson(ans, content.substring(b, e + 1)) != DeserializationError::Ok) {
     return false;
   }
-  expression = ans["expression"].as<String>();
-  gesture = ans["gesture"].as<String>();
-  Serial.printf("[MirrorVision] expression=%s gesture=%s\n", expression.c_str(), gesture.c_str());
+  resExpression = ans["expression"].as<String>();
+  resGesture = ans["gesture"].as<String>();
+  Serial.printf("[MirrorVision] expression=%s gesture=%s\n",
+                resExpression.c_str(), resGesture.c_str());
   return true;
+}
+
+static void visionTaskLoop(void*){
+  for(;;){
+    if (state == State::Requested) {
+      state = State::Busy;
+      bool ok = classify();
+      state = ok ? State::ResultReady : State::Idle;
+    }
+    vTaskDelay(pdMS_TO_TICKS(50));
+  }
 }
 
 static void applyExpression(const String& expr){
@@ -124,21 +145,33 @@ void poll(void){
   if (!MirrorState::isOn()) {
     return;
   }
-  static uint32_t lastPollMs = 0;
-  uint32_t now = millis();
-  if (now - lastPollMs < POLL_INTERVAL_MS) {
-    return;
-  }
-  lastPollMs = now;
 
-  String expression, gesture;
-  if (!classifyFrame(expression, gesture)) {
+  // apply a finished classification (fast, runs on the main loop)
+  if (state == State::ResultReady) {
+    if (resGesture != "none" && resGesture.length() > 0) {
+      applyGesture(resGesture);   // gestures win over plain mirroring
+    } else {
+      applyExpression(resExpression);
+    }
+    state = State::Idle;
     return;
   }
-  if (gesture != "none" && gesture.length() > 0) {
-    applyGesture(gesture);      // gestures win over plain mirroring
-  } else {
-    applyExpression(expression);
+
+  // hand a fresh frame to the worker (capture+encode is only ~tens of ms)
+  static uint32_t lastCaptureMs = 0;
+  uint32_t now = millis();
+  if (state == State::Idle && now - lastCaptureMs >= POLL_INTERVAL_MS) {
+    lastCaptureMs = now;
+    String b64;
+    if (!camera_capture_base64(b64) || b64.length() == 0) {
+      Serial.println("[MirrorVision] capture failed");
+      return;
+    }
+    frameB64 = std::move(b64);
+    if (visionTask == nullptr) {
+      xTaskCreate(visionTaskLoop, "mirrorVision", 12 * 1024, nullptr, 1, &visionTask);
+    }
+    state = State::Requested;
   }
 }
 
