@@ -33,14 +33,62 @@ static const ReactionStep kDartSteps[] = {
   { Expression::Neutral, "",         90,   90,   600,     0,    0,   300 },  // recover
 };
 
+// Blow kiss: surprised -> heart eyes -> shy (3 stages, ~1s each)
+static const char* const kNoKeywords[] = { nullptr };
+static const ReactionStep kBlowKissSteps[] = {
+  { Expression::Doubt,   "!",        -1,   -1,     0,  1500,  120,  1000 },  // surprised
+  { Expression::Happy,   "\u2665 \u2665", -1, -1,  0,  1800,  150,  1000 },  // heart eyes
+  { Expression::Happy,   ">///<",    -1,   -1,     0,     0,    0,  1000 },  // shy
+  { Expression::Neutral, "",         -1,   -1,     0,     0,    0,   200 },
+};
+
+// Wave back: swing the pan servo left/right like waving hello
+static const ReactionStep kWaveSteps[] = {
+  { Expression::Happy,   "안녕!",     70,   90,   250,  1200,  100,   350 },
+  { Expression::Happy,   nullptr,   110,   90,   250,     0,    0,   350 },
+  { Expression::Happy,   nullptr,    70,   90,   250,     0,    0,   350 },
+  { Expression::Happy,   nullptr,   110,   90,   250,     0,    0,   350 },
+  { Expression::Neutral, "",         90,   90,   400,     0,    0,   200 },
+};
+
+// Hand heart: show hearts on screen
+static const ReactionStep kHeartSteps[] = {
+  { Expression::Happy,   "\u2665",   -1,   -1,     0,  1600,  120,   800 },
+  { Expression::Happy,   "\u2665 \u2665 \u2665", -1, -1, 0, 1900, 120, 1200 },
+  { Expression::Neutral, "",         -1,   -1,     0,     0,    0,   200 },
+};
+
+// Mimic smile / surprise (single-step, used by the vision mirror)
+static const ReactionStep kSmileSteps[] = {
+  { Expression::Happy,   nullptr,    -1,   -1,     0,     0,    0,   300 },
+};
+static const ReactionStep kSurpriseSteps[] = {
+  { Expression::Doubt,   "!",        -1,   -1,     0,  1500,  100,   800 },
+  { Expression::Doubt,   "",         -1,   -1,     0,     0,    0,   100 },
+};
+
 static const Reaction REACTIONS[] = {
-  { "bang", kBangKeywords, kBangSteps, sizeof(kBangSteps) / sizeof(kBangSteps[0]) },
-  { "dart", kDartKeywords, kDartSteps, sizeof(kDartSteps) / sizeof(kDartSteps[0]) },
+  { "bang",      kBangKeywords, kBangSteps,     sizeof(kBangSteps) / sizeof(kBangSteps[0]) },
+  { "dart",      kDartKeywords, kDartSteps,     sizeof(kDartSteps) / sizeof(kDartSteps[0]) },
+  { "blow_kiss", kNoKeywords,   kBlowKissSteps, sizeof(kBlowKissSteps) / sizeof(kBlowKissSteps[0]) },
+  { "wave",      kNoKeywords,   kWaveSteps,     sizeof(kWaveSteps) / sizeof(kWaveSteps[0]) },
+  { "heart",     kNoKeywords,   kHeartSteps,    sizeof(kHeartSteps) / sizeof(kHeartSteps[0]) },
+  { "smile",     kNoKeywords,   kSmileSteps,    sizeof(kSmileSteps) / sizeof(kSmileSteps[0]) },
+  { "surprise",  kNoKeywords,   kSurpriseSteps, sizeof(kSurpriseSteps) / sizeof(kSurpriseSteps[0]) },
 };
 
 // ---------------------------------------------------------------------------
 // Engine
 // ---------------------------------------------------------------------------
+
+const Reaction* findReactionByName(const char* name){
+  for (auto& r : REACTIONS) {
+    if (strcmp(r.name, name) == 0) {
+      return &r;
+    }
+  }
+  return nullptr;
+}
 
 const Reaction* matchReaction(const String& sttText){
   for (auto& r : REACTIONS) {

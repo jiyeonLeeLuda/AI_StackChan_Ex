@@ -28,6 +28,7 @@
 #include "driver/HeadTouchSensor.h"
 #include "mod/AiStackChan/MirrorState.h"
 #include "mod/AiStackChan/Reaction.h"
+#include "mod/AiStackChan/MirrorVision.h"
 
 using namespace m5avatar;
 
@@ -263,6 +264,11 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
 #ifdef USE_SERVO
   if (box_servo.contain(x, y))
   {
+#if defined(ENABLE_CAMERA)
+    // on camera builds the left edge is the silent-mode toggle, so mirror
+    // mode lives on the center box instead
+    MirrorState::toggle();
+#endif
     //servo_home = !servo_home;
     //sw_tone();
   }
@@ -309,12 +315,15 @@ void AiStackChanMod::doubleTapped(float ax, float ay, float az)
 void AiStackChanMod::idle(void)
 {
 
+  /// Mirror mode: cloud-vision expression mirroring ///
+  MirrorVision::poll();
+
   /// Face detect ///
 #if defined(ENABLE_CAMERA)
   //顔が検出されれば音声認識を開始。
   bool isFaceDetected;
   isFaceDetected = camera_capture_and_face_detect();
-  if(!isSilentMode){
+  if(!isSilentMode && !MirrorState::isOn()){
 
 #if defined(ENABLE_FACE_DETECT)
     if(isFaceDetected){

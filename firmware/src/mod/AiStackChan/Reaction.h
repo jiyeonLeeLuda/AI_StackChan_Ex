@@ -29,6 +29,10 @@ struct Reaction {
 // Returns the first reaction whose keyword appears in sttText, else nullptr.
 const Reaction* matchReaction(const String& sttText);
 
+// Looks up a reaction by its name ("bang", "dart", "blow_kiss", "wave",
+// "heart"...). Used by the vision gesture classifier.
+const Reaction* findReactionByName(const char* name);
+
 // Plays a reaction synchronously (loop context). Pauses idle servo motion,
 // restores Neutral + servo origin at the end.
 void playReaction(const Reaction& r);
