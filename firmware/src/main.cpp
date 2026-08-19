@@ -673,7 +673,7 @@ void setup()
   avatar.addTask(lipSync, "lipSync", 2048, 2);
   avatar.addTask(servo, "servo", 2048);
   avatar.addTask(battery_check, "battery_check", 2048);
-  avatar.setSpeechFont(&fonts::efontJA_16);
+  avatar.setSpeechFont(&fonts::efontKR_16);
 
   Serial.printf("Speaker volume (yaml): %d\n", system_config.getExConfig().audio.speaker_volume);
   if(0 != system_config.getExConfig().audio.speaker_volume){

@@ -341,8 +341,8 @@ void ChatGPT::chat(String text, const char *base64_buf) {
 String ChatGPT::execChatGpt(String json_string, String& calledFunc) {
   String response = "";
   avatar.setExpression(Expression::Doubt);
-  avatar.setSpeechFont(&fonts::efontJA_16);
-  avatar.setSpeechText("考え中…");
+  avatar.setSpeechFont(&fonts::efontKR_16);
+  avatar.setSpeechText("생각 중…");
   String ret;
   const String& customEndpoint = param.llm_conf.customEndpoint;
   const String& model = param.llm_conf.model;
@@ -351,7 +351,7 @@ String ChatGPT::execChatGpt(String json_string, String& calledFunc) {
     // model field is mandatory. Refuse rather than sending an unintended model.
     Serial.printf("Refusing request: llm type is Custom OpenAI but model is blank\n");
     avatar.setExpression(Expression::Sad);
-    avatar.setSpeechText("モデル未設定");
+    avatar.setSpeechText("모델 미설정");
     delay(1500);
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
@@ -365,7 +365,7 @@ String ChatGPT::execChatGpt(String json_string, String& calledFunc) {
       // send the configured API key to a host the user did not select.
       Serial.printf("Refusing request: customEndpoint is https:// but customRootCAFile is missing: %s\n", customEndpoint.c_str());
       avatar.setExpression(Expression::Sad);
-      avatar.setSpeechText("CA未設定");
+      avatar.setSpeechText("CA 미설정");
       delay(1500);
       avatar.setSpeechText("");
       avatar.setExpression(Expression::Neutral);
@@ -388,7 +388,7 @@ String ChatGPT::execChatGpt(String json_string, String& calledFunc) {
       Serial.print(F("deserializeJson() failed: "));
       Serial.println(error.f_str());
       avatar.setExpression(Expression::Sad);
-      avatar.setSpeechText("エラーです");
+      avatar.setSpeechText("오류가 났어요");
       response = "エラーです";
       delay(1000);
       avatar.setSpeechText("");
@@ -414,8 +414,8 @@ String ChatGPT::execChatGpt(String json_string, String& calledFunc) {
     }
   } else {
     avatar.setExpression(Expression::Sad);
-    avatar.setSpeechFont(&fonts::efontJA_16);
-    avatar.setSpeechText("わかりません");
+    avatar.setSpeechFont(&fonts::efontKR_16);
+    avatar.setSpeechText("잘 모르겠어요");
     response = "わかりません";
     delay(1000);
     avatar.setSpeechText("");

@@ -252,7 +252,7 @@ void alarmTimerCallback(TimerHandle_t _xTimer){
 void powerOffTimerCallback(TimerHandle_t _xTimer){
   xAlarmTimer = NULL;
   //Serial.println("おやすみなさい。");
-  avatar.setSpeechText("おやすみなさい。");
+  avatar.setSpeechText("안녕히 주무세요.");
   delay(2000);
   avatar.setSpeechText("");
   M5.Power.powerOff();
@@ -286,7 +286,7 @@ String FunctionCall::exec_calledFunc(const char* name, const char* args){
     Serial.print(F("deserializeJson(arguments) failed: "));
     Serial.println(error.f_str());
     avatar.setExpression(Expression::Sad);
-    avatar.setSpeechText("エラーです");
+    avatar.setSpeechText("오류가 났어요");
     response = "エラーです";
     delay(1000);
     avatar.setSpeechText("");
@@ -636,7 +636,7 @@ String FunctionCall::ask(const char* text){
   avatar.setExpression(Expression::Happy);
   robot->speech(String(text));
   sw_tone();
-  avatar.setSpeechText("どうぞ話してください");
+  avatar.setSpeechText("말씀해 주세요");
   String ret = robot->listen();
 //#ifdef USE_SERVO
   servo_home = prev_servo_home;
@@ -648,7 +648,7 @@ String FunctionCall::ask(const char* text){
   } else {
     Serial.println("音声認識失敗");
     avatar.setExpression(Expression::Sad);
-    avatar.setSpeechText("聞き取れませんでした");
+    avatar.setSpeechText("잘 못 들었어요");
     delay(2000);
 
   } 
