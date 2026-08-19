@@ -1,6 +1,7 @@
 #include <Arduino.h>
 //#include <FS.h>
 #include <SD.h>
+#include <SPI.h>
 #include <SPIFFS.h>
 #include "share/Version.h"
 #include "share/Mutex.h"
@@ -581,6 +582,13 @@ void setup()
 
   bool sd_available = false;
 #if !defined(ARDUINO_M5STACK_ATOMS3R)
+#if defined(ARDUINO_M5STACK_CORES3)
+  // CoreS3 is built with the esp32s3box board variant, whose default SPI pins
+  // (SCK=12/MISO=13/MOSI=11) do not match CoreS3's SD card bus. Start the SPI
+  // bus explicitly with the CoreS3 pins (SCK=36, MISO=35, MOSI=37, CS=4)
+  // before SD.begin(); later spi.begin() calls inside SD.begin() are no-ops.
+  SPI.begin(GPIO_NUM_36, GPIO_NUM_35, GPIO_NUM_37, GPIO_NUM_4);
+#endif
   sd_available = SD.begin(GPIO_NUM_4, SPI, 25000000);
 #endif
   bool full_config_loaded = load_system_config(sd_available);
