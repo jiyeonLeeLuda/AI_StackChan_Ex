@@ -26,6 +26,7 @@
 #include "rootCA/rootCAgoogle.h"       //speechToText
 #include "driver/Audio.h"              //speechToText
 #include "driver/HeadTouchSensor.h"
+#include "mod/AiStackChan/MirrorState.h"
 
 using namespace m5avatar;
 
@@ -82,6 +83,12 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
   Serial.println("音声認識結果");
   if(ret != "") {
     Serial.println(ret);
+    if(MirrorState::isToggleCommand(ret)){
+      MirrorState::toggle();
+      avatar.setExpression(Expression::Neutral);
+      servo_home = true;
+      return;
+    }
     robot->chat(ret, base64_buf);
     avatar.setSpeechText("");
     avatar.setExpression(Expression::Neutral);
@@ -265,7 +272,7 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
     delay(2000);
     avatar.setSpeechText("");
 #else
-    //sw_tone();
+    MirrorState::toggle();
 #endif
   }
   if (box_BtnC.contain(x, y))
