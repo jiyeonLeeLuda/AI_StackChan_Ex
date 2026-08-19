@@ -12,7 +12,7 @@ extern Avatar avatar;
 
 
 bool isSubWindowON = true;
-bool isSilentMode = false;
+bool isSilentMode = true;   // KR fork: auto voice-recording on face detect is OFF by default (toggle: left-edge touch)
 
 static camera_config_t camera_config = {
     .pin_pwdn     = -1,

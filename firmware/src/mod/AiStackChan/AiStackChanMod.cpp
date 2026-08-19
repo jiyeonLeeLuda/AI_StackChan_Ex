@@ -155,7 +155,9 @@ AiStackChanMod::AiStackChanMod(bool _isOffline)
 
 void AiStackChanMod::init(void)
 {
+  // show the mod name briefly instead of leaving it on screen forever
   avatar.setSpeechText("AI Stack-chan");
+  modNameShownAtMs = millis();
 #if defined(ENABLE_CAMERA)
   if(isSubWindowON){
     avatar.set_isSubWindowEnable(true);
@@ -278,10 +280,10 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
 #if defined(ENABLE_CAMERA)
     isSilentMode = !isSilentMode;
     if(isSilentMode){
-      avatar.setSpeechText("무음 모드");
+      avatar.setSpeechText("자동 대화 꺼짐");
     }
     else{
-      avatar.setSpeechText("무음 모드 해제");
+      avatar.setSpeechText("자동 대화 켜짐");
     }
     delay(2000);
     avatar.setSpeechText("");
@@ -314,6 +316,12 @@ void AiStackChanMod::doubleTapped(float ax, float ay, float az)
 
 void AiStackChanMod::idle(void)
 {
+
+  // clear the boot/mod-name balloon after 3 seconds
+  if (modNameShownAtMs != 0 && millis() - modNameShownAtMs > 3000) {
+    modNameShownAtMs = 0;
+    avatar.setSpeechText("");
+  }
 
   /// Mirror mode: cloud-vision expression mirroring ///
   MirrorVision::poll();
