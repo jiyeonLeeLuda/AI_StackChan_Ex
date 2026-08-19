@@ -25,10 +25,20 @@ String Whisper::Transcribe(AudioWhisper* audio) {
   for (auto i = 0; i < 2; ++i) {
     ltoa(random(0x7fffffff), boundary + strlen(boundary), 16);
   }
+  // Language from SC_ExConfig.yaml (stt.language). Whisper expects ISO-639-1,
+  // so cut a BCP-47 code like "ko-KR" down to "ko". Default is "ko".
+  String language = param.stt_conf.language;
+  int sep = language.indexOf('-');
+  if(sep > 0){
+    language = language.substring(0, sep);
+  }
+  if(language.length() == 0 || language == "null"){
+    language = "ko";
+  }
   const String header = "--" + String(boundary) + "\r\n"
     "Content-Disposition: form-data; name=\"model\"\r\n\r\nwhisper-1\r\n"
     "--" + String(boundary) + "\r\n"
-    "Content-Disposition: form-data; name=\"language\"\r\n\r\nja\r\n"
+    "Content-Disposition: form-data; name=\"language\"\r\n\r\n" + language + "\r\n"
     "--" + String(boundary) + "\r\n"
     "Content-Disposition: form-data; name=\"file\"; filename=\"speak.wav\"\r\n"
     "Content-Type: application/octet-stream\r\n\r\n";

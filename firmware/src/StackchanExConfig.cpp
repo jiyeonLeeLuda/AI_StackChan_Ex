@@ -329,6 +329,10 @@ void StackchanExConfig::setExtendSettings(DynamicJsonDocument doc)
 
     _ex_parameters.stt.type         = doc["stt"]["type"].as<int>();
     _ex_parameters.stt.model        = doc["stt"]["model"].as<String>();
+    _ex_parameters.stt.language     = doc["stt"]["language"].as<String>();
+    if((_ex_parameters.stt.language.length() == 0) || (_ex_parameters.stt.language == "null")){
+        _ex_parameters.stt.language = "ko-KR";   // default language for this fork
+    }
 
     _ex_parameters.wakeword.type    = doc["wakeword"]["type"].as<int>();
     _ex_parameters.wakeword.keyword = doc["wakeword"]["keyword"].as<String>();
@@ -373,6 +377,7 @@ void StackchanExConfig::printExtParameters(void)
 
     M5_LOGI("stt type: %d", _ex_parameters.stt.type);
     M5_LOGI("stt model: %s", _ex_parameters.stt.model.c_str());
+    M5_LOGI("stt language: %s", _ex_parameters.stt.language.c_str());
 
     M5_LOGI("wakeword type: %d", _ex_parameters.wakeword.type);
     M5_LOGI("wakeword keyword: %s", _ex_parameters.wakeword.keyword.c_str());

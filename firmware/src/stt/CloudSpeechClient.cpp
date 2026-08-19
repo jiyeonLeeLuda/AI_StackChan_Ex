@@ -4,7 +4,8 @@
 #include <ArduinoJson.h>
 #include "rootCA/rootCAgoogle.h"
 
-String LANG_CODE = "ja-jp";
+// Fallback when stt.language is not set in SC_ExConfig.yaml.
+String LANG_CODE = "ko-KR";
 
 namespace {
 constexpr char* API_HOST = "speech.googleapis.com";
@@ -39,7 +40,11 @@ void CloudSpeechClient::PrintHttpBody2(Audio* audio) {
 }
 
 String CloudSpeechClient::Transcribe(Audio* audio) {
-  String HttpBody1 = "{\"config\":{\"encoding\":\"LINEAR16\",\"sampleRateHertz\":16000,\"languageCode\":\""+LANG_CODE+"\"},\"audio\":{\"content\":\"";
+  String langCode = param.stt_conf.language;
+  if(langCode.length() == 0 || langCode == "null"){
+    langCode = LANG_CODE;
+  }
+  String HttpBody1 = "{\"config\":{\"encoding\":\"LINEAR16\",\"sampleRateHertz\":16000,\"languageCode\":\""+langCode+"\"},\"audio\":{\"content\":\"";
   String HttpBody3 = "\"}}\r\n\r\n";
   int httpBody2Length = (audio->wavDataSize + sizeof(audio->paddedHeader))*4/3;  // 4/3 is from base64 encoding
   String ContentLength = String(HttpBody1.length() + httpBody2Length + HttpBody3.length());

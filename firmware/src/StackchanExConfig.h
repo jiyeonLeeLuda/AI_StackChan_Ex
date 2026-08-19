@@ -69,6 +69,8 @@ typedef struct TTSConf {
 typedef struct STTConf {
     int type;
     String model;
+    String language;    // BCP-47 (e.g. "ko-KR", "ja-JP"). Google STT uses it as-is;
+                        // OpenAI Whisper uses only the ISO-639-1 part before the '-'.
 } stt_s;
 
 typedef struct WakeWordConf {
