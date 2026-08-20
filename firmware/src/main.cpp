@@ -10,6 +10,7 @@
 #include "share/DefaultParams.h"
 #include <M5Unified.h>
 #include <nvs.h>
+#include <esp_task_wdt.h>
 #include <Avatar.h>
 #include <faces/CatFace.h>
 #include "StackchanExConfig.h" 
@@ -17,6 +18,7 @@
 #include "mod/ModManager.h"
 #include "mod/ModBase.h"
 #include "mod/AiStackChan/WinkEye.h"
+#include "mod/AiStackChan/MirrorState.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
 #include "mod/AiStackChan/RealtimeAiMod.h"
 #include "mod/Pomodoro/PomodoroMod.h"
@@ -695,12 +697,19 @@ void setup()
     M5.Display.fillScreen(TFT_BLACK);
     M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
     M5.Display.setCursor(0, 0);
-    M5.Display.println("Config incomplete.");
-    M5.Display.println("");
-    M5.Display.println("Missing one or more files:");
-    M5.Display.println("SC_BasicConfig.yaml");
-    M5.Display.println("SC_SecConfig.yaml");
-    M5.Display.println("SC_ExConfig.yaml");
+    M5.Display.setFont(&fonts::efontKR_16);
+    if(!sd_available){
+      M5.Display.println("SD카드를 읽지 못했어요.");
+      M5.Display.println("");
+      M5.Display.println("카드를 뺐다가 딸깍 소리가");
+      M5.Display.println("나게 다시 꽂은 뒤,");
+      M5.Display.println("뒷면 리셋 버튼을 눌러주세요.");
+    }else{
+      M5.Display.println("설정 파일이 없어요:");
+      M5.Display.println("SC_BasicConfig.yaml");
+      M5.Display.println("SC_SecConfig.yaml");
+      M5.Display.println("SC_ExConfig.yaml");
+    }
     while(true){
       M5.update();
       delay(100);
@@ -794,6 +803,13 @@ void setup()
 
   //init_watchdog();
 
+  // Task watchdog on the main loop: a genuine deadlock (e.g. a blocked I2C
+  // scan or network call without timeout) reboots the device within 5
+  // minutes instead of hanging forever. 300s clears the worst legitimate
+  // turn (whisper 20s + chat 65s + tts 30s + playback).
+  esp_task_wdt_init(300, true);
+  esp_task_wdt_add(NULL);
+
   //ヒープメモリ残量確認(デバッグ用)
   check_heap_free_size();
   check_heap_largest_free_block();
@@ -807,6 +823,28 @@ END:
 
 void loop()
 {
+  esp_task_wdt_reset();
+
+  // Heap guard: if internal RAM gets critically fragmented, drop the
+  // biggest consumer (mirror mode) before TLS starts failing.
+  {
+    static uint32_t lastHeapCheckMs = 0;
+    if (millis() - lastHeapCheckMs > 15000) {
+      lastHeapCheckMs = millis();
+      size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
+      if (largest < 24 * 1024) {
+        Serial.printf("[HeapGuard] largest internal block %u bytes\n", (unsigned)largest);
+        if (MirrorState::isOn()) {
+          Serial.println("[HeapGuard] disabling mirror mode");
+          MirrorState::toggle();
+          avatar.setSpeechText("메모리 부족: 미러 모드 종료");
+          delay(1500);
+          avatar.setSpeechText("");
+        }
+      }
+    }
+  }
+
   //get_elapsed_time_micro("loop() start");
   M5.update();
   //get_elapsed_time_micro("M5.update time");
