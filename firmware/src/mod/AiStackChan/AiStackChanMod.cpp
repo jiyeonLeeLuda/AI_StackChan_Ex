@@ -119,6 +119,9 @@ AiStackChanMod::AiStackChanMod(bool _isOffline)
   : isOffline{_isOffline}
 {
   box_servo.setupBox(80, 120, 80, 80);
+  // mirror-mode toggle: the whole central area below the top STT strip,
+  // excluding the left/right edge buttons
+  box_mirror.setupBox(45, 85, 230, 155);
 #if defined(ENABLE_CAMERA)
   box_stt.setupBox(107, 0, M5.Display.width()-107, 80);
   box_subWindow.setupBox(0, 0, 107, 80);
@@ -263,14 +266,18 @@ void AiStackChanMod::display_touched(int16_t x, int16_t y)
     STT_ChatGPT();
 #endif
   }
+#if defined(ENABLE_CAMERA)
+  // on camera builds the left edge is the silent-mode toggle, so mirror
+  // mode lives on the central area instead
+  if (box_mirror.contain(x, y))
+  {
+    MirrorState::toggle();
+    return;
+  }
+#endif
 #ifdef USE_SERVO
   if (box_servo.contain(x, y))
   {
-#if defined(ENABLE_CAMERA)
-    // on camera builds the left edge is the silent-mode toggle, so mirror
-    // mode lives on the center box instead
-    MirrorState::toggle();
-#endif
     //servo_home = !servo_home;
     //sw_tone();
   }

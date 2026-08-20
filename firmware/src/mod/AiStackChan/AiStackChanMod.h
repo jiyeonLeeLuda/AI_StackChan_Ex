@@ -7,6 +7,7 @@
 class AiStackChanMod: public ModBase{
 private:
     box_t box_servo;
+    box_t box_mirror;
     box_t box_stt;
     box_t box_BtnA;
     box_t box_BtnC;
