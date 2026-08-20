@@ -11,9 +11,9 @@
 struct ReactionStep {
   m5avatar::Expression expr;
   const char* balloon;   // balloon text ("" = clear, nullptr = leave as-is)
-  int16_t servoX;        // absolute degrees, -1 = no move
-  int16_t servoY;        // absolute degrees, -1 = no move
-  uint16_t servoMs;      // move duration
+  int16_t servoX;        // pan offset in degrees from the servo origin
+  int16_t servoY;        // tilt offset in degrees from the servo origin (negative = tilt back)
+  uint16_t servoMs;      // move duration; 0 = no servo move in this step
   uint16_t toneHz;       // 0 = no tone
   uint16_t toneMs;
   uint16_t holdMs;       // wait before next step
