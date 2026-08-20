@@ -44,11 +44,20 @@ static TaskHandle_t visionTask = nullptr;
 // NOTE: this text is embedded verbatim inside a JSON string, so it must not
 // contain double quotes or backslashes.
 static const char* PROMPT =
-  "You are the eyes of a small robot. Look at the person in the image and "
-  "answer ONLY a compact JSON object with two keys: expression (one of "
-  "happy, surprised, sad, angry, sleepy, neutral) and gesture (one of wink, "
-  "blow_kiss, finger_gun, wave, hand_heart, none). No prose, JSON only. "
-  "Pick the single most likely value for each.";
+  "You are the eyes of a small robot looking at a person. Answer ONLY a "
+  "compact JSON object with two keys. Key expression: one of happy, "
+  "surprised, sad, angry, sleepy, neutral. Key gesture: one of "
+  "wink (one eye deliberately closed), "
+  "blow_kiss (hand near lips as if sending a kiss), "
+  "finger_gun (hand shaped like a pistol pointed at the camera), "
+  "wave (open hand raised beside the face or waving), "
+  "blow_dart (both hands cupped in a tube at the mouth as if blowing through "
+  "a pipe or shooting a blow dart), "
+  "hand_heart (a heart shape made with fingers or hands or arms - includes "
+  "the Korean finger heart where thumb and index finger cross, and a heart "
+  "formed with both hands above the head or in front of the chest), "
+  "none (anything else). "
+  "If the gesture is ambiguous answer none. JSON only, no prose.";
 
 // Runs in the worker task: HTTPS classify of frameB64.
 static bool classify(void){
@@ -137,6 +146,7 @@ static void applyGesture(const String& gesture){
   else if (gesture == "finger_gun") r = findReactionByName("bang");
   else if (gesture == "wave")       r = findReactionByName("wave");
   else if (gesture == "hand_heart") r = findReactionByName("heart");
+  else if (gesture == "blow_dart")  r = findReactionByName("dart");
   else if (gesture == "wink")       r = findReactionByName("smile");  // TODO: real wink (custom eye)
   if (r != nullptr) {
     playReaction(*r);
