@@ -57,8 +57,11 @@ class AudioFileSourceHttpsPostStream : public AudioFileSource
   private:
     virtual uint32_t readInternal(void *data, uint32_t len, bool nonBlock);
 //    WiFiClient client;
-    WiFiClientSecure client;
-    HTTPClient http;
+    // Shared across instances so the TLS session to the TTS host survives
+    // between speeches (a new handshake costs 1-2s on ESP32). Safe because
+    // only one audio stream plays at a time (audio mutex).
+    static WiFiClientSecure client;
+    static HTTPClient http;
     int pos;
     int size;
     int reconnectTries;

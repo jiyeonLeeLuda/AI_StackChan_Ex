@@ -23,6 +23,9 @@
 #include "AudioFileSourceHttpsPostStream.h"
 //#include "rootCACertificate.h"
 
+WiFiClientSecure AudioFileSourceHttpsPostStream::client;
+HTTPClient AudioFileSourceHttpsPostStream::http;
+
 AudioFileSourceHttpsPostStream::AudioFileSourceHttpsPostStream()
 {
   pos = 0;

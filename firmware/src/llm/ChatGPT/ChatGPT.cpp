@@ -190,13 +190,25 @@ String ChatGPT::post_json(const char* url, const char* json_string, const char* 
     return payload;
   }
 
+  // Persistent TLS client for the https:// path: keeping the connection
+  // alive across chat turns skips a 1-2s handshake per request. The client
+  // is only ever used from the main loop, so no locking is needed.
+  static WiFiClientSecure* persistent_client = nullptr;
+  static const char* persistent_ca = nullptr;
+
   WiFiClient* client = nullptr;
+  bool persistent = false;
   if (is_https) {
-    WiFiClientSecure* secure_client = new WiFiClientSecure;
-    if (secure_client) {
-      secure_client->setCACert(root_ca);
+    if (persistent_client == nullptr || persistent_ca != root_ca) {
+      delete persistent_client;
+      persistent_client = new WiFiClientSecure;
+      if (persistent_client) {
+        persistent_client->setCACert(root_ca);
+        persistent_ca = root_ca;
+      }
     }
-    client = secure_client;
+    client = persistent_client;
+    persistent = true;
   } else {
     client = new WiFiClient;
   }
@@ -210,6 +222,7 @@ String ChatGPT::post_json(const char* url, const char* json_string, const char* 
     // Scope HTTPClient so it is destroyed before the underlying client is deleted.
     HTTPClient http;
     http.setTimeout(65000);
+    http.setReuse(true);
 
     Serial.printf("[%s] begin...\n", tag);
     if (http.begin(*client, url)) {
@@ -244,11 +257,9 @@ String ChatGPT::post_json(const char* url, const char* json_string, const char* 
     }
   }
 
-  // WiFiClient's destructor is non-virtual, so delete via the concrete type
-  // to ensure ~WiFiClientSecure() runs and TLS state is freed.
-  if (is_https) {
-    delete static_cast<WiFiClientSecure*>(client);
-  } else {
+  // The persistent https client stays alive (keep-alive skips the next
+  // handshake); plain-http clients are still torn down per call.
+  if (!persistent) {
     delete client;
   }
   return payload;
