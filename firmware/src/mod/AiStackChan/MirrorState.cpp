@@ -19,6 +19,18 @@ void set(bool on){ mirrorOn = on; }
 void toggle(void){
   mirrorOn = !mirrorOn;
 #if defined(ENABLE_CAMERA)
+  if(mirrorOn){
+    avatar.setSpeechText("카메라 켜는 중...");
+    if(camera_init() != ESP_OK){
+      avatar.setSpeechText("카메라 오류");
+      delay(1200);
+      avatar.setSpeechText("");
+      mirrorOn = false;
+      return;
+    }
+  }else{
+    camera_deinit();   // stop the DVP/DMA stream entirely outside mirror mode
+  }
   isSubWindowON = mirrorOn;
   avatar.set_isSubWindowEnable(mirrorOn);   // camera preview follows mirror mode
 #endif

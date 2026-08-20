@@ -778,8 +778,11 @@ void setup()
   M5.Speaker.setVolume(robot->spk_volume);
 
 #if defined(ENABLE_CAMERA)
-  camera_init();
-  avatar.set_isSubWindowEnable(true);
+  // KR fork: the camera is initialized lazily when mirror mode turns ON.
+  // An initialized camera streams DVP frames via DMA continuously (cam_hal
+  // EV-EOF-OVF spam) and eats CPU + internal RAM even when nothing reads
+  // them, slowing down TLS for STT/LLM/TTS.
+  avatar.set_isSubWindowEnable(false);
 #endif
 
 #if defined(ENABLE_TAP_DETECT)

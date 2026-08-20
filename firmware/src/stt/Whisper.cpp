@@ -24,6 +24,7 @@ Whisper::~Whisper() {
 }
 
 String Whisper::Transcribe(AudioWhisper* audio) {
+  uint32_t t_start = millis();
   char boundary[64] = "------------------------";
   for (auto i = 0; i < 2; ++i) {
     ltoa(random(0x7fffffff), boundary + strlen(boundary), 16);
@@ -74,15 +75,19 @@ String Whisper::Transcribe(AudioWhisper* audio) {
   // footer
   client.print(footer.c_str());
   client.flush();
+  uint32_t t_upload = millis();
 
   // wait response
   const auto now = ::millis();
   while (client.available() == 0) {
-    if (::millis() - now > 10000) {
+    if (::millis() - now > 20000) {
       Serial.println(">>> Client Timeout !");
       return "";
     }
   }
+  uint32_t t_ttfb = millis();
+  Serial.printf("[Whisper] upload=%lums server_wait=%lums\n",
+                (unsigned long)(t_upload - t_start), (unsigned long)(t_ttfb - t_upload));
 
   bool isBody = false;
   String body = "";
@@ -122,11 +127,13 @@ String Whisper::speech_to_text(){
   Serial.println("Record end\r\n");
   Serial.println("音声認識開始");
   avatar.setSpeechText("인식 중...");   // recording is over; now waiting for Whisper
+  uint32_t t_conn0 = millis();
   if (!client.connect(API_HOST, API_PORT)) {
     Serial.println("Whisper: Connection failed!");
     ret = String("");
   }
   else{
+    Serial.printf("[Whisper] tls_connect=%lums\n", (unsigned long)(millis() - t_conn0));
     ret = Transcribe(audio);
     client.stop();
   }

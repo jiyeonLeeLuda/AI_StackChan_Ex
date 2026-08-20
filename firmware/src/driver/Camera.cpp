@@ -66,6 +66,10 @@ esp_err_t camera_init(void){
     return ESP_OK;
 }
 
+void camera_deinit(void){
+    esp_camera_deinit();
+}
+
 static void draw_face_boxes(fb_data_t *fb, std::list<dl::detect::result_t> *results, int face_id)
 {
     int x, y, w, h;
