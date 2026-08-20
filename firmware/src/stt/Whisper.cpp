@@ -60,10 +60,12 @@ String Whisper::Transcribe(AudioWhisper* audio) {
 
   auto ptr = audio->GetBuffer();
   auto remainings = audio->GetSize();
+  // Send in large chunks without per-chunk flush(): flushing every 512 bytes
+  // waits for an ACK ~190 times per take and stretched the upload of a 3s
+  // recording (~96KB) to tens of seconds.
   while (remainings > 0) {
-    auto sz = (remainings > 512) ? 512 : remainings;
+    auto sz = (remainings > 8192) ? 8192 : remainings;
     client.write(ptr, sz);
-    client.flush();
     remainings -= sz;
     ptr += sz;
   }
