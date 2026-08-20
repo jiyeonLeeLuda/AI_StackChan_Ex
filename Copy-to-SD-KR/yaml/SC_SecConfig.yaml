@@ -10,6 +10,13 @@
 wifi:
   ssid: "********"
   password: "********"
+  # 예비 Wi-Fi (선택): 위 네트워크 연결 실패 시 순서대로 시도합니다 (최대 4개).
+  # 회사망이 ID/비밀번호 로그인 방식(WPA2-Enterprise)이면 연결 불가 → 폰 핫스팟을 쓰세요.
+  #networks:
+  #  - ssid: "iPhone-hotspot"
+  #    password: "********"
+  #  - ssid: "office-guest"
+  #    password: "********"
 
 apikey:
   # 한국어 구성(LLM=ChatGPT, STT=Whisper, TTS=OpenAI TTS)에서는
