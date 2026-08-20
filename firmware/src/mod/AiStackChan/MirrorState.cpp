@@ -1,6 +1,9 @@
 #include <M5Unified.h>
 #include <Avatar.h>
 #include "MirrorState.h"
+#if defined(ENABLE_CAMERA)
+#include "driver/Camera.h"
+#endif
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -15,6 +18,10 @@ void set(bool on){ mirrorOn = on; }
 
 void toggle(void){
   mirrorOn = !mirrorOn;
+#if defined(ENABLE_CAMERA)
+  isSubWindowON = mirrorOn;
+  avatar.set_isSubWindowEnable(mirrorOn);   // camera preview follows mirror mode
+#endif
   avatar.setSpeechText(mirrorOn ? "미러 모드 ON" : "미러 모드 OFF");
   M5.Speaker.tone(mirrorOn ? 1200 : 800, 120);
   delay(1200);

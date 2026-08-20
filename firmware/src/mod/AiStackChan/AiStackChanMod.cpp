@@ -85,6 +85,20 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
   Serial.println("音声認識結果");
   if(ret != "") {
     Serial.println(ret);
+    // Attach the camera frame only when the utterance is actually about
+    // seeing something; a ~30KB base64 image on every chat makes gpt-4o
+    // slow and expensive.
+    if(base64_buf != NULL){
+      static const char* visionWords[] = {"보여", "보이", "봐", "뭐가", "뭐야", "누구",
+                                          "이게", "저게", "이거", "저거", "사진", "카메라"};
+      bool wantsVision = false;
+      for(auto w : visionWords){
+        if(ret.indexOf(w) >= 0){ wantsVision = true; break; }
+      }
+      if(!wantsVision){
+        base64_buf = NULL;
+      }
+    }
     if(MirrorState::isToggleCommand(ret)){
       MirrorState::toggle();
       avatar.setExpression(Expression::Neutral);
@@ -330,7 +344,12 @@ void AiStackChanMod::idle(void)
     avatar.setSpeechText("");
   }
 
-  /// Mirror mode: cloud-vision expression mirroring ///
+  /// Camera: only active while mirror mode is ON (default = quiet avatar) ///
+#if defined(ENABLE_CAMERA)
+  if(!MirrorState::isOn()){
+    goto skip_camera;
+  }
+#endif
   MirrorVision::poll();
 
   /// Face detect ///
@@ -367,6 +386,10 @@ void AiStackChanMod::idle(void)
 #endif
   }
 #endif  //ENABLE_CAMERA
+
+#if defined(ENABLE_CAMERA)
+skip_camera:
+#endif
 
   //Wakeword
   if(robot->m_config.getExConfig().wakeword.type == WAKEWORD_TYPE_MODULE_LLM_KWS){

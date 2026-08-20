@@ -52,7 +52,9 @@ bool AudioFileSourceHttpsPostStream::open(const char *url)
 {
   pos = 0;
   client.setCACert(rootCACertificate);
+  client.setTimeout(30000);
   http.begin(client, url);
+  http.setTimeout(30000);   // default 5s is too short for gpt-4o-mini-tts TTFB
   http.setReuse(true);
 #ifndef ESP32
   http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
