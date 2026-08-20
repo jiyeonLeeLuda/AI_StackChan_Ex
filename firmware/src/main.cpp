@@ -585,18 +585,49 @@ void setup()
 #if !defined(ARDUINO_M5STACK_ATOMS3R)
 #if defined(ARDUINO_M5STACK_CORES3)
   // The shared LCD/SD bus makes the first mount flaky on CoreS3; retry with
-  // re-priming and progressively slower clocks.
+  // re-priming and progressively slower clocks, and as a last resort reboot
+  // the whole chip (bounded by an RTC counter so a missing card cannot cause
+  // an endless boot loop).
   {
-    const uint32_t freqs[] = {25000000, 25000000, 15000000, 4000000, 4000000};
-    for(int i = 0; i < 5 && !sd_available; i++){
+    const uint32_t freqs[] = {25000000, 25000000, 15000000, 15000000,
+                              4000000, 4000000, 400000, 400000};
+    for(int i = 0; i < 8 && !sd_available; i++){
+      if(i == 4){
+        // Half the ladder failed: the card itself is likely wedged (it keeps
+        // power across warm reboots). Cut ALDO4 (TF slot 3.3V) so the card
+        // truly cold-starts, then continue retrying.
+        Serial.println("SD: power-cycling TF slot (ALDO4)");
+        uint8_t reg90 = M5.Power.Axp2101.readRegister8(0x90);
+        M5.Power.Axp2101.writeRegister8(0x90, reg90 & ~0x08);
+        delay(250);
+        M5.Power.Axp2101.writeRegister8(0x95, 33 - 5);   // ALDO4 = 3.3V
+        M5.Power.Axp2101.writeRegister8(0x90, reg90 | 0x08);
+        delay(250);
+      }
       cores3_sd_prime();
       sd_available = SD.begin(GPIO_NUM_4, SPI, freqs[i]);
       Serial.printf("SD mount try %d @%luHz: %s\n", i + 1,
                     (unsigned long)freqs[i], sd_available ? "OK" : "NG");
       if(!sd_available){
         SD.end();
-        delay(300);
+        delay(300 + i * 100);
       }
+    }
+
+    static RTC_NOINIT_ATTR uint32_t sd_reboot_magic;
+    static RTC_NOINIT_ATTR uint32_t sd_reboot_count;
+    if(sd_reboot_magic != 0x5D5D5D5Du){
+      sd_reboot_magic = 0x5D5D5D5Du;
+      sd_reboot_count = 0;
+    }
+    if(sd_available){
+      sd_reboot_count = 0;
+    }else if(sd_reboot_count < 2){
+      sd_reboot_count++;
+      Serial.printf("SD mount failed; rebooting to retry (%lu/2)\n",
+                    (unsigned long)sd_reboot_count);
+      delay(500);
+      ESP.restart();
     }
   }
 #else

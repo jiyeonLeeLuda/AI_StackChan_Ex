@@ -13,7 +13,7 @@ extern bool servo_home;
 //   X (pan)  0..180, center 90 / Y (tilt) 60..90, center 90 (60 = tilted back)
 
 // "빵야" (finger gun): flinch -> tilt back -> play dead with X eyes -> recover
-static const char* const kBangKeywords[] = { "빵야", "빵 야", "bang", nullptr };
+static const char* const kBangKeywords[] = { "빵야", "빵 야", "빵아", "방야", "팡야", "빵냐", "bang", "Bang", nullptr };
 static const ReactionStep kBangSteps[] = {
   // expr                balloon   servoX servoY  ms   toneHz toneMs holdMs
   { Expression::Doubt,   nullptr,    -1,   -1,     0,  1800,   80,   350 },  // flinch
@@ -23,7 +23,7 @@ static const ReactionStep kBangSteps[] = {
 };
 
 // "훅" (blow dart): look around -> stagger -> spiral eyes + groan -> recover
-static const char* const kDartKeywords[] = { "훅", "독화살", nullptr };
+static const char* const kDartKeywords[] = { "훅", "후욱", "독화살", "슉", nullptr };
 static const ReactionStep kDartSteps[] = {
   { Expression::Doubt,   nullptr,    60,   90,   300,     0,    0,   450 },  // look left
   { Expression::Doubt,   nullptr,   120,   90,   300,     0,    0,   450 },  // look right

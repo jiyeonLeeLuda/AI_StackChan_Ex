@@ -1,5 +1,8 @@
 #include <ArduinoJson.h>
+#include <Avatar.h>
 #include "Whisper.h"
+
+extern m5avatar::Avatar avatar;
 #include "rootCA/rootCACertificate.h"
 
 namespace {
@@ -90,9 +93,21 @@ String Whisper::Transcribe(AudioWhisper* audio) {
     }
   }
 
-  StaticJsonDocument<200> doc;
-  ::deserializeJson(doc, body);
-  return doc["text"].as<String>();
+  // The response may be chunked; keep only the JSON object part.
+  int b = body.indexOf('{');
+  int e = body.lastIndexOf('}');
+  if (b >= 0 && e > b) {
+    body = body.substring(b, e + 1);
+  }
+  DynamicJsonDocument doc(2048);   // 200B was too small for long Korean sentences
+  DeserializationError err = ::deserializeJson(doc, body);
+  String text = doc["text"].as<String>();
+  if (err != DeserializationError::Ok || text.length() == 0 || text == "null") {
+    Serial.printf("[Whisper] empty result (err=%s) body: %.300s\n",
+                  err.c_str(), body.c_str());
+    return "";
+  }
+  return text;
 }
 
 
@@ -104,7 +119,7 @@ String Whisper::speech_to_text(){
   audio->Record();  
   Serial.println("Record end\r\n");
   Serial.println("音声認識開始");
-  //avatar.setSpeechText("わかりました");  
+  avatar.setSpeechText("인식 중...");   // recording is over; now waiting for Whisper
   if (!client.connect(API_HOST, API_PORT)) {
     Serial.println("Whisper: Connection failed!");
     ret = String("");

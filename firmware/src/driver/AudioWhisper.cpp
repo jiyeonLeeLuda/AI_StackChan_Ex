@@ -2,7 +2,8 @@
 #include "AudioWhisper.h"
 
 //constexpr size_t record_number = 300/2;
-constexpr size_t record_number = 400;
+//constexpr size_t record_number = 400;   // 3.75s
+constexpr size_t record_number = 320;     // 3.0s  (KR fork: shorter wait)
 //constexpr size_t record_number = 200;
 constexpr size_t record_length = 150;
 constexpr size_t record_size = record_number * record_length;
@@ -81,4 +82,12 @@ void AudioWhisper::Record() {
     M5.Mic.record(data, record_length, record_samplerate);
   }
   M5.Mic.end();
+
+  // mic sanity log: average absolute amplitude of the take (0 = dead mic)
+  uint32_t acc = 0;
+  const size_t n = record_size;
+  for (size_t i = 0; i < n; i += 16) {
+    acc += abs(wavData[i]);
+  }
+  Serial.printf("[Mic] avg level: %lu\n", (unsigned long)(acc / (n / 16)));
 }

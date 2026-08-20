@@ -72,7 +72,7 @@ static void STT_ChatGPT(const char *base64_buf = NULL) {
 #endif
 
   avatar.setExpression(Expression::Happy);
-  avatar.setSpeechText("부르셨어요?");
+  avatar.setSpeechText("듣는 중...");   // 녹음은 이미 시작됨 — 바로 말하기
 
   String ret = robot->listen();
   avatar.setSpeechText("");
