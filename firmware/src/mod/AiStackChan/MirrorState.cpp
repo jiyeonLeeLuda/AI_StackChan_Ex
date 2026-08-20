@@ -1,6 +1,7 @@
 #include <M5Unified.h>
 #include <Avatar.h>
 #include "MirrorState.h"
+#include "share/Mutex.h"
 #if defined(ENABLE_CAMERA)
 #include "driver/Camera.h"
 #endif
@@ -35,8 +36,21 @@ void toggle(void){
   avatar.set_isSubWindowEnable(mirrorOn);   // camera preview follows mirror mode
 #endif
   avatar.setSpeechText(mirrorOn ? "미러 모드 ON" : "미러 모드 OFF");
+  // audio-safe notification tone: the mic owns the I2S port by default, and
+  // tone() plays asynchronously -- ending the speaker mid-tone crashes the
+  // spk_task (i2s_write on an uninstalled driver)
+  enterMutexAudio();
+  M5.Mic.end();
+  M5.Speaker.begin();
+  delay(50);
   M5.Speaker.tone(mirrorOn ? 1200 : 800, 120);
-  delay(1200);
+  delay(300);
+  uint32_t tmo = millis();
+  while(M5.Speaker.isPlaying() && millis() - tmo < 1000){ delay(10); }
+  M5.Speaker.end();
+  M5.Mic.begin();
+  exitMutexAudio();
+  delay(800);
   avatar.setSpeechText("");
 }
 

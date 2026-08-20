@@ -132,6 +132,9 @@ void playReaction(const Reaction& r){
     delay(st.holdMs);
   }
 
+  // let any queued tone finish before tearing the speaker down
+  uint32_t tmo = millis();
+  while(M5.Speaker.isPlaying() && millis() - tmo < 1500){ delay(10); }
   M5.Speaker.end();
   M5.Mic.begin();
   exitMutexAudio();
