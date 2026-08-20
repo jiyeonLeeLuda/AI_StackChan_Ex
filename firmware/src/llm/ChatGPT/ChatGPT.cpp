@@ -19,7 +19,8 @@ extern Avatar avatar;
 
 
 const String json_ChatString = 
-"{\"model\": \"gpt-4o\","
+"{\"model\": \"gpt-4o-mini\","      // KR fork: 2-3x faster than gpt-4o for toy conversations (override via llm.model)
+  "\"max_tokens\": 200,"              // long answers are slow to generate AND slow to speak
   "\"messages\": [{\"role\": \"system\", \"content\": \"\"},"     // ユーザーが設定するロール
                   "{\"role\": \"system\", \"content\": \"\"},"    // システム用のロール
                   "{\"role\": \"system\", \"content\": \"User Info: \"}],"  // 長期記憶の要約
@@ -148,9 +149,20 @@ void ChatGPT::load_role(){
       Serial.println("load_role: JSON deserialization error");
     }
 
+    // KR fork: skip rarely used functions; every definition rides along with
+    // every request (~950 prompt tokens for the full list) and slows TTFB.
+    static const char* droppedFuncs[] = {"timer", "timer_change", "register_wakeword",
+                                         "wakeword_enable", "delete_wakeword", "get_week"};
     int nFuncs = functionsDoc.size();
     for(int i=0; i<nFuncs; i++){
-      chat_doc["functions"].add(functionsDoc[i]);
+      const char* fname = functionsDoc[i]["name"];
+      bool dropped = false;
+      for(auto d : droppedFuncs){
+        if(fname != nullptr && strcmp(fname, d) == 0){ dropped = true; break; }
+      }
+      if(!dropped){
+        chat_doc["functions"].add(functionsDoc[i]);
+      }
     }
   }
 
