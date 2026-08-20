@@ -349,8 +349,21 @@ void AiStackChanMod::idle(void)
   if(!MirrorState::isOn()){
     goto skip_camera;
   }
-#endif
+  {
+    // Mirror mode: refresh the preview (~6fps) and poll the cloud classifier.
+    // The on-device face detector below is skipped entirely -- it is heavy
+    // and its Happy/Neutral updates would overwrite the mirrored expression.
+    static uint32_t lastPreviewMs = 0;
+    if(millis() - lastPreviewMs > 150){
+      lastPreviewMs = millis();
+      camera_capture_preview();
+    }
+    MirrorVision::poll();
+    goto skip_camera;
+  }
+#else
   MirrorVision::poll();
+#endif
 
   /// Face detect ///
 #if defined(ENABLE_CAMERA)

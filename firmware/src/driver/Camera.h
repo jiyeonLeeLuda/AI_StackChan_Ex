@@ -24,6 +24,7 @@ extern bool isSilentMode;
 extern esp_err_t camera_init(void);
 extern void camera_deinit(void);
 extern bool camera_capture_and_face_detect(void);
+extern void camera_capture_preview(void);   // preview refresh only, no face detect
 extern bool camera_capture_base64(String& out);
 
 #endif //_CAMERA_H_

@@ -70,6 +70,21 @@ void camera_deinit(void){
     esp_camera_deinit();
 }
 
+// Refresh the avatar sub-window from the camera without running the
+// on-device face detector (used by mirror mode, where detection would both
+// slow the loop and overwrite the mirrored expression).
+void camera_capture_preview(void){
+  M5.In_I2C.release();
+  camera_fb_t *fb = esp_camera_fb_get();
+  if(fb == nullptr){
+    return;
+  }
+  if(isSubWindowON){
+    avatar.updateSubWindowCam565(fb->buf);
+  }
+  esp_camera_fb_return(fb);
+}
+
 static void draw_face_boxes(fb_data_t *fb, std::list<dl::detect::result_t> *results, int face_id)
 {
     int x, y, w, h;
