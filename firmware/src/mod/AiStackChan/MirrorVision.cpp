@@ -147,7 +147,7 @@ static void applyGesture(const String& gesture){
   else if (gesture == "wave")       r = findReactionByName("wave");
   else if (gesture == "hand_heart") r = findReactionByName("heart");
   else if (gesture == "blow_dart")  r = findReactionByName("dart");
-  else if (gesture == "wink")       r = findReactionByName("smile");  // TODO: real wink (custom eye)
+  else if (gesture == "wink")       r = findReactionByName("wink");
   if (r != nullptr) {
     playReaction(*r);
   }

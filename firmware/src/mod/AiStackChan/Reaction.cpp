@@ -2,6 +2,7 @@
 #include "Reaction.h"
 #include "Robot.h"
 #include "share/Mutex.h"
+#include "mod/AiStackChan/WinkEye.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -68,7 +69,14 @@ static const ReactionStep kSurpriseSteps[] = {
   { Expression::Doubt,   "",          0,    0,     0,     0,    0,   100 },
 };
 
+// Wink back: right eye shut (WinkEye), happy mouth
+static const ReactionStep kWinkSteps[] = {
+  { Expression::Happy,   nullptr,     0,    0,     0,  1500,   80,  1500 },
+  { Expression::Neutral, "",          0,    0,     0,     0,    0,   200 },
+};
+
 static const Reaction REACTIONS[] = {
+  { "wink",      kNoKeywords,   kWinkSteps,     sizeof(kWinkSteps) / sizeof(kWinkSteps[0]) },
   { "bang",      kBangKeywords, kBangSteps,     sizeof(kBangSteps) / sizeof(kBangSteps[0]) },
   { "dart",      kDartKeywords, kDartSteps,     sizeof(kDartSteps) / sizeof(kDartSteps[0]) },
   { "blow_kiss", kNoKeywords,   kBlowKissSteps, sizeof(kBlowKissSteps) / sizeof(kBlowKissSteps[0]) },
@@ -106,6 +114,9 @@ void playReaction(const Reaction& r){
   Serial.printf("[Reaction] play: %s\n", r.name);
   bool prev_home = servo_home;
   servo_home = false;   // stop idle wiggling while the choreography runs
+  if (strcmp(r.name, "wink") == 0) {
+    WinkFace::setWink(true);   // right eye renders closed for the duration
+  }
 
   // The mic normally owns the I2S port; swap to the speaker for the whole
   // sequence (same pattern as sw_tone(); calling Speaker.tone() while the
@@ -139,6 +150,7 @@ void playReaction(const Reaction& r){
   M5.Mic.begin();
   exitMutexAudio();
 
+  WinkFace::setWink(false);
   avatar.setSpeechText("");
   avatar.setExpression(Expression::Neutral);
   servo_home = prev_home;

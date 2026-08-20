@@ -16,6 +16,7 @@
 #include "Robot.h"
 #include "mod/ModManager.h"
 #include "mod/ModBase.h"
+#include "mod/AiStackChan/WinkEye.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
 #include "mod/AiStackChan/RealtimeAiMod.h"
 #include "mod/Pomodoro/PomodoroMod.h"
@@ -762,6 +763,8 @@ void setup()
   if(isConfigPortalMode){
     show_config_portal_avatar_qr();
   }
+
+  WinkFace::install(avatar);   // winkable right eye (mirror-mode wink reaction)
 
   avatar.addTask(lipSync, "lipSync", 2048, 2);
   avatar.addTask(servo, "servo", 2048);
