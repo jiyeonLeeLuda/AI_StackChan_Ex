@@ -41,11 +41,13 @@ static String resExpression;   // worker -> main
 static String resGesture;      // worker -> main
 static TaskHandle_t visionTask = nullptr;
 
+// NOTE: this text is embedded verbatim inside a JSON string, so it must not
+// contain double quotes or backslashes.
 static const char* PROMPT =
   "You are the eyes of a small robot. Look at the person in the image and "
-  "answer ONLY a JSON object, no prose: "
-  "{\"expression\":\"happy|surprised|sad|angry|sleepy|neutral\","
-  "\"gesture\":\"wink|blow_kiss|finger_gun|wave|hand_heart|none\"}. "
+  "answer ONLY a compact JSON object with two keys: expression (one of "
+  "happy, surprised, sad, angry, sleepy, neutral) and gesture (one of wink, "
+  "blow_kiss, finger_gun, wave, hand_heart, none). No prose, JSON only. "
   "Pick the single most likely value for each.";
 
 // Runs in the worker task: HTTPS classify of frameB64.
