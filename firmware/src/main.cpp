@@ -10,6 +10,7 @@
 #include "share/DefaultParams.h"
 #include <M5Unified.h>
 #include <nvs.h>
+#include <YAMLDuino.h>
 #include <esp_task_wdt.h>
 #include <Avatar.h>
 #include <faces/CatFace.h>
@@ -255,6 +256,40 @@ bool Wifi_connection_check() {
   return true;
 }
 
+// Optional fallback networks from SC_SecConfig.yaml:
+//   wifi:
+//     ssid: "primary"
+//     password: "..."
+//     networks:            # tried in order when the primary fails
+//       - ssid: "office-or-hotspot"
+//         password: "..."
+// Note: only WPA2-PSK works; WPA2-Enterprise (id+password login) is not
+// supported by this config path.
+#define ALT_WIFI_MAX 4
+static int load_alt_wifi_networks(wifi_s* list, int max_n)
+{
+  File f = SD.open("/yaml/SC_SecConfig.yaml", FILE_READ);
+  if(!f){
+    return 0;
+  }
+  DynamicJsonDocument doc(3072);
+  DeserializationError err = deserializeYml(doc, f);
+  f.close();
+  if(err != DeserializationError::Ok){
+    return 0;
+  }
+  int n = 0;
+  for(JsonVariant v : doc["wifi"]["networks"].as<JsonArray>()){
+    if(n >= max_n) break;
+    String ssid = v["ssid"].as<String>();
+    if(ssid.length() == 0 || ssid == "null") continue;
+    list[n].ssid = ssid;
+    list[n].password = v["password"].as<String>();
+    n++;
+  }
+  return n;
+}
+
 bool connect_wifi_from_yaml(wifi_s* wifi_info)
 {
   if(wifi_info == nullptr || wifi_info->ssid.length() == 0){
@@ -267,7 +302,23 @@ bool connect_wifi_from_yaml(wifi_s* wifi_info)
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
   WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
-  return Wifi_connection_check();
+  if(Wifi_connection_check()){
+    return true;
+  }
+
+  // primary failed: walk the fallback list
+  static wifi_s alt[ALT_WIFI_MAX];
+  int n = load_alt_wifi_networks(alt, ALT_WIFI_MAX);
+  for(int i = 0; i < n; i++){
+    Serial.printf("\nTrying fallback WiFi SSID: %s\n", alt[i].ssid.c_str());
+    M5.Display.printf("\nWiFi: %s\n", alt[i].ssid.c_str());
+    WiFi.disconnect();
+    WiFi.begin(alt[i].ssid.c_str(), alt[i].password.c_str());
+    if(Wifi_connection_check()){
+      return true;
+    }
+  }
+  return false;
 }
 
 WifiFallbackMode select_wifi_fallback_mode()
