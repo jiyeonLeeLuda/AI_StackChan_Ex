@@ -29,6 +29,9 @@
 #include "mod/AiStackChan/MirrorState.h"
 #include "mod/AiStackChan/Reaction.h"
 #include "mod/AiStackChan/MirrorVision.h"
+#if defined(ENABLE_COCKPIT)
+#include "cockpit/CockpitClient.h"
+#endif
 
 using namespace m5avatar;
 
@@ -66,6 +69,16 @@ static void report_batt_level(){
 
 
 static void STT_ChatGPT(const char *base64_buf = NULL) {
+#if defined(ENABLE_COCKPIT)
+  // cockpit 연결 시: 온디바이스 STT→LLM→TTS(TLS 3회)를 스킵하고 마이크 PCM을
+  // audio.chunk로 서버에 전송한다. 응답은 서버가 내려보내는 tts.chunk(기존 재생
+  // 경로)와 sequence가 처리한다. 미연결이면 아래 기존 파이프라인으로 폴백.
+  if (cockpit::isConnected()) {
+    cockpit::runVoiceTurn();
+    return;
+  }
+#endif
+
   bool prev_servo_home = servo_home;
 #ifdef USE_SERVO
   servo_home = true;

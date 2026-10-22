@@ -13,11 +13,13 @@
 #include "SpiRamJsonDocument.h"
 #include "Robot.h"
 #include "share/Version.h"
+#include "share/Mutex.h"
 #include "mod/AiStackChan/MirrorState.h"
+#include "driver/AudioWhisper.h"
+#include "mbedtls/base64.h"
 
 #if defined(ENABLE_CAMERA)
 #include "driver/Camera.h"
-#include "mbedtls/base64.h"
 #endif
 
 using namespace m5avatar;
@@ -64,6 +66,19 @@ volatile bool    g_framePending = false;   // true면 태스크가 전송할 프
 uint32_t         g_frameSeq = 0;
 #endif
 
+// audio.chunk 전송용 PSRAM 스테이징 버퍼(camera.frame과 동일 SPSC 패턴).
+// 0.5s @16kHz PCM16 = 16000B, base64 ≈ 21.3KB. 32KB면 JSON 포함 충분.
+const size_t AUDIO_BUF_SIZE = 32 * 1024;
+char*            g_audioBuf = nullptr;
+volatile size_t  g_audioLen = 0;
+volatile bool    g_audioPending = false;   // true면 태스크가 전송할 audio.chunk 대기 중
+
+volatile bool g_capturing = false;         // 마이크 캡처 중(모드 보고용 = listening)
+// 발화 송신 후 응답(tts.chunk) 대기 상태. 15초 내 응답 없으면 타임아웃 해제.
+volatile bool g_awaitingResponse = false;
+uint32_t      g_awaitStartMs = 0;
+const uint32_t RESPONSE_TIMEOUT_MS = 15000;
+
 // libb64 base64 디코드. 반환값은 디코드된 바이트 수.
 int b64decode(const char* input, uint8_t* output) {
   base64_decodestate s;
@@ -72,8 +87,9 @@ int b64decode(const char* input, uint8_t* output) {
 }
 
 const char* modeStr() {
-  if (M5.Speaker.isPlaying())  return "speaking";
-  if (g_listening)             return "listening";
+  if (g_capturing)             return "listening";   // 마이크 캡처 중
+  if (M5.Speaker.isPlaying())  return "speaking";    // 응답 재생 중
+  if (g_listening)             return "listening";   // 서버 listen 제어
   if (MirrorState::isOn())     return "mirror";
   return "idle";
 }
@@ -140,6 +156,37 @@ void playTtsChunk(const char* b64) {
   g_ttsBufIdx ^= 1;
 }
 
+// PCM16 청크를 audio.chunk JSON으로 PSRAM 스테이징 버퍼에 조립하고 pending 설정.
+// 직전 청크가 아직 송신 대기 중이면 송신될 때까지 잠시 대기(SPSC drain).
+// 실제 송신은 WS 태스크가 수행한다.
+void stageAudioChunk(const uint8_t* pcm, size_t pcmLen, uint32_t seq, bool final) {
+  if (g_audioBuf == nullptr) return;
+
+  // 직전 청크 송신 완료 대기(최대 2s)
+  uint32_t t0 = millis();
+  while (g_audioPending && (millis() - t0 < 2000)) { delay(2); }
+
+  int headLen = snprintf(g_audioBuf, AUDIO_BUF_SIZE,
+      "{\"type\":\"audio.chunk\",\"seq\":%u,\"data\":\"", (unsigned)seq);
+  if (headLen < 0 || (size_t)headLen + 24 >= AUDIO_BUF_SIZE) return;
+
+  size_t b64len = 0;
+  int rc = mbedtls_base64_encode((unsigned char*)(g_audioBuf + headLen),
+                                 AUDIO_BUF_SIZE - headLen - 24, &b64len,
+                                 pcm, pcmLen);
+  if (rc != 0) {
+    Serial.printf("[cockpit] audio.chunk too large (pcm=%u), dropped\n", (unsigned)pcmLen);
+    return;
+  }
+  size_t pos = (size_t)headLen + b64len;
+  // 서픽스: "},"final":true/false}
+  int tailLen = snprintf(g_audioBuf + pos, AUDIO_BUF_SIZE - pos,
+      "\",\"final\":%s}", final ? "true" : "false");
+  if (tailLen < 0) return;
+  g_audioLen = pos + tailLen;
+  g_audioPending = true;   // WS 태스크가 송신
+}
+
 void handleMessage(uint8_t* payload, size_t length) {
   g_rxDoc->clear();
   DeserializationError err = deserializeJson(*g_rxDoc, payload, length);
@@ -154,9 +201,18 @@ void handleMessage(uint8_t* payload, size_t length) {
     String sid = (*g_rxDoc)["sessionId"].as<String>();
     Serial.printf("[cockpit] <- hello.ack session=%s\n", sid.c_str());
   } else if (type == "sequence") {
+    if (g_awaitingResponse) {
+      g_awaitingResponse = false;
+      avatar.setSpeechText("");
+    }
     String id = (*g_rxDoc)["id"].as<String>();
     g_seq.start(id, (*g_rxDoc)["steps"].as<JsonArrayConst>());
   } else if (type == "tts.chunk") {
+    // 응답 도착: thinking 대기 해제 + 말풍선 정리
+    if (g_awaitingResponse) {
+      g_awaitingResponse = false;
+      avatar.setSpeechText("");
+    }
     const char* data = (*g_rxDoc)["data"].as<const char*>();
     if (data) playTtsChunk(data);
   } else if (type == "listen") {
@@ -216,6 +272,18 @@ void taskLoop(void*) {
         g_framePending = false;
       }
 #endif
+      // 캡처 스레드에서 스테이징된 audio.chunk 송신(음성 턴)
+      if (g_audioPending) {
+        g_ws.sendTXT((uint8_t*)g_audioBuf, g_audioLen);
+        g_audioPending = false;
+      }
+      // 응답(tts.chunk/sequence) 15초 타임아웃 → idle 복귀
+      if (g_awaitingResponse && (millis() - g_awaitStartMs >= RESPONSE_TIMEOUT_MS)) {
+        g_awaitingResponse = false;
+        avatar.setSpeechText("");
+        avatar.setExpression(Expression::Neutral);
+        Serial.println("[cockpit] response timeout; back to idle");
+      }
       // 주기적 state
       uint32_t now = millis();
       if (now - g_lastStateMs >= STATE_INTERVAL_MS) {
@@ -261,6 +329,12 @@ void begin(const cockpit_s& cfg) {
     Serial.println("[cockpit] frame buffer alloc failed; camera.frame disabled");
   }
 #endif
+
+  // audio.chunk 스테이징 버퍼(PSRAM). 실패해도 cockpit 자체는 동작(음성 턴만 비활성).
+  g_audioBuf = (char*)heap_caps_malloc(AUDIO_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (g_audioBuf == nullptr) {
+    Serial.println("[cockpit] audio buffer alloc failed; audio.chunk disabled");
+  }
 
   g_ws.begin(g_host.c_str(), g_port, "/robot");
   g_ws.onEvent(onWsEvent);
@@ -316,6 +390,47 @@ void sendCameraFrame() {
   g_frameSeq++;
   g_framePending = true;   // WS 태스크가 송신
 #endif
+}
+
+void runVoiceTurn() {
+  if (!g_enabled || !g_connected || g_audioBuf == nullptr) return;
+  // half-duplex: 재생 중이거나 이미 턴 진행 중이면 새 캡처 금지(에코 방지)
+  if (M5.Speaker.isPlaying() || g_awaitingResponse || g_capturing) return;
+
+  g_capturing = true;
+  avatar.setExpression(Expression::Happy);
+  avatar.setSpeechText("듣는 중...");
+
+  // 기존 녹음 경로 재사용(AudioWhisper): 16kHz / PCM16 / mono, 고정 3.0s.
+  // 프로토콜(16kHz PCM16 mono)과 샘플레이트 일치 → 리샘플 불필요.
+  AudioWhisper audio;
+  enterMutexAudio();
+  audio.Record();          // 블로킹 녹음(기존 온디바이스 경로와 동일)
+  exitMutexAudio();
+
+  g_capturing = false;
+
+  // 녹음 완료 버퍼를 ~0.5s 청크로 분할해 순차 송신(후분할 방식).
+  // 44바이트 WAV 헤더는 건너뛰고 raw PCM16만 보낸다.
+  const uint8_t* pcm = audio.GetBuffer() + 44;
+  size_t pcmBytes = audio.GetSize() - 44;        // 96000B = 3.0s @16kHz PCM16
+  const size_t CHUNK_BYTES = 16000;              // 0.5s
+  size_t off = 0;
+  uint32_t seq = 0;
+  while (off < pcmBytes) {
+    size_t n = (CHUNK_BYTES < pcmBytes - off) ? CHUNK_BYTES : (pcmBytes - off);
+    bool final = (off + n >= pcmBytes);
+    stageAudioChunk(pcm + off, n, seq++, final);
+    off += n;
+  }
+  Serial.printf("[cockpit] -> audio.chunk x%u (final), %u PCM bytes\n",
+                (unsigned)seq, (unsigned)pcmBytes);
+
+  // 응답(tts.chunk/sequence) 대기 상태로 전환. 15초 타임아웃은 WS 태스크가 처리.
+  g_awaitingResponse = true;
+  g_awaitStartMs = millis();
+  avatar.setExpression(Expression::Neutral);
+  avatar.setSpeechText("생각 중...");
 }
 
 void notifyTouch(int16_t x, int16_t y) {

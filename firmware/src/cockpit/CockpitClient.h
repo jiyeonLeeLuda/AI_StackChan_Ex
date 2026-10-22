@@ -29,6 +29,12 @@ bool isConnected();
 // ENABLE_CAMERA가 없으면 아무 것도 하지 않는다.
 void sendCameraFrame();
 
+// 음성 턴: 마이크를 캡처(기존 AudioWhisper 경로, 16kHz PCM16 mono, 3.0s)해
+// audio.chunk로 서버에 전송하고 응답(tts.chunk/sequence) 대기 상태로 전환한다.
+// 캡처는 호출 스레드(발화 트리거 = 모드 idle)에서 블로킹으로 수행. 재생 중이거나
+// 이미 턴 진행 중이면 즉시 반환(half-duplex, 에코 방지).
+void runVoiceTurn();
+
 // 디스플레이 터치 좌표를 존(center/forehead/left-edge/right-edge)으로 매핑해
 // touch 이벤트를 송신한다. loop() 컨텍스트에서 호출 가능(실제 송신은 내부 태스크에서).
 void notifyTouch(int16_t x, int16_t y);
