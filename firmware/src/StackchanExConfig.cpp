@@ -356,6 +356,7 @@ void StackchanExConfig::setExtendSettings(DynamicJsonDocument doc)
     if(_ex_parameters.cockpit.robotId.length() == 0 || _ex_parameters.cockpit.robotId == "null"){
         _ex_parameters.cockpit.robotId = "stackchan-cores3";
     }
+    _ex_parameters.cockpit.drive = doc["cockpit"]["drive"].as<bool>();   // 미설정 시 false
 #endif
 
 }
@@ -407,6 +408,7 @@ void StackchanExConfig::printExtParameters(void)
     M5_LOGI("cockpit host: %s", _ex_parameters.cockpit.host.length() > 0 ? _ex_parameters.cockpit.host.c_str() : "(none)");
     M5_LOGI("cockpit port: %d", _ex_parameters.cockpit.port);
     M5_LOGI("cockpit robotId: %s", _ex_parameters.cockpit.robotId.c_str());
+    M5_LOGI("cockpit drive: %s", _ex_parameters.cockpit.drive ? "true" : "false");
 #endif
 
 }

@@ -93,6 +93,7 @@ typedef struct CockpitConf {
     String host;        // cockpit 서버 호스트(IP/도메인). 비어있으면 cockpit 완전 비활성.
     uint16_t port;      // 포트. 미설정 시 3001.
     String robotId;     // hello.robotId. 미설정 시 "stackchan-cores3".
+    bool drive;         // TB6612 차량 구동 활성화. 기본 false(핀 미초기화, capabilities 제외).
 } cockpit_s;
 #endif
 

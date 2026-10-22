@@ -2,6 +2,7 @@
 
 #include "CockpitClient.h"
 #include "SequencePlayer.h"
+#include "DriveController.h"
 
 #include <M5Unified.h>
 #include <WiFi.h>
@@ -33,6 +34,8 @@ namespace {
 
 WebSocketsClient    g_ws;
 SequencePlayer      g_seq;
+DriveController     g_drive;
+bool                g_driveEnabled = false;   // cockpit.drive=true일 때만 true
 SpiRamJsonDocument* g_rxDoc = nullptr;   // 수신 파싱용(tts.chunk base64 수용, PSRAM)
 TaskHandle_t        g_taskH = nullptr;
 
@@ -89,6 +92,7 @@ int b64decode(const char* input, uint8_t* output) {
 const char* modeStr() {
   if (g_capturing)             return "listening";   // 마이크 캡처 중
   if (M5.Speaker.isPlaying())  return "speaking";    // 응답 재생 중
+  if (g_drive.isActive())      return "driving";     // 최근 drive 명령 ttl 유효
   if (g_listening)             return "listening";   // 서버 listen 제어
   if (MirrorState::isOn())     return "mirror";
   return "idle";
@@ -100,13 +104,16 @@ void sendHello() {
   doc["protocolVersion"] = 0;
   doc["robotId"] = g_robotId;
   doc["firmware"] = String("AiStackChanEx ") + FW_VERSION;
-  // 이 개체의 능력. 차량 미연결 CoreS3이므로 drive/led 없음.
+  // 이 개체의 능력. drive는 cockpit.drive=true로 TB6612가 연결됐을 때만 보고.
   JsonArray caps = doc.createNestedArray("capabilities");
   caps.add("face");
   caps.add("servo");
   caps.add("mic");
   caps.add("speaker");
   caps.add("camera");
+  if (g_driveEnabled) {
+    caps.add("drive");
+  }
   String out;
   serializeJson(doc, out);
   g_ws.sendTXT(out);
@@ -220,8 +227,19 @@ void handleMessage(uint8_t* payload, size_t length) {
     g_listening = (action == "start");
     Serial.printf("[cockpit] <- listen %s\n", action.c_str());
   } else if (type == "drive") {
-    // 이 개체는 drive 능력이 없다. 무시하고 로그만.
-    Serial.println("[cockpit] <- drive (ignored: no drive capability)");
+    if (!g_driveEnabled) {
+      // drive 미활성 개체. 무시하고 로그만.
+      Serial.println("[cockpit] <- drive (ignored: drive disabled)");
+    } else if (MirrorState::isOn()) {
+      // 상호 배제: 미러가 이미 카메라(GPIO2)를 점유 중이면 drive 무시(모터 정지 유지).
+      // "하드웨어를 먼저 점유한 쪽이 이긴다" 규칙.
+      Serial.println("[cockpit] <- drive (ignored: mirror mode active, GPIO2 busy)");
+    } else {
+      float left  = (*g_rxDoc)["left"].as<float>();
+      float right = (*g_rxDoc)["right"].as<float>();
+      uint32_t ttlMs = (*g_rxDoc)["ttlMs"].as<uint32_t>();
+      g_drive.setDrive(left, right, ttlMs);   // ttlMs 후 데드맨 자동 정지
+    }
   } else {
     Serial.printf("[cockpit] <- unknown type: %s\n", type.c_str());
   }
@@ -237,6 +255,7 @@ void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_DISCONNECTED:
       g_connected = false;
+      g_drive.stop();   // 연결 끊기면 즉시 정지(안전)
       Serial.println("[cockpit] disconnected");
       break;
     case WStype_TEXT:
@@ -256,7 +275,8 @@ void taskLoop(void*) {
   Serial.println("[cockpit] task started");
   for (;;) {
     g_ws.loop();
-    g_seq.tick();   // 시퀀스 스텝 전환(비블로킹)
+    g_seq.tick();     // 시퀀스 스텝 전환(비블로킹)
+    g_drive.tick();   // 데드맨: drive ttl 만료 시 정지(연결 여부 무관하게 항상 체크)
 
     if (g_connected) {
       // loop()에서 큐잉된 터치 송신
@@ -306,6 +326,13 @@ void begin(const cockpit_s& cfg) {
   g_port    = cfg.port;
   g_robotId = cfg.robotId;
 
+  // drive=true일 때만 TB6612 PWM 핀 초기화 + capabilities에 "drive" 추가.
+  // false면 핀을 전혀 건드리지 않아 기존 Port.A/B 용도가 보존된다.
+  if (cfg.drive) {
+    g_drive.begin();
+    g_driveEnabled = true;
+  }
+
   // Wi-Fi modem sleep 비활성화. cockpit 모드에서만 적용(비활성 모드는 기존 동작 보존).
   // 실측: modem sleep이 켜진 상태에서 ping RTT 924ms + 패킷 유실 발생. 실시간 WS
   // 제어·오디오 스트리밍에 수백 ms 절전 지연은 치명적이므로 끈다.
@@ -348,6 +375,8 @@ void begin(const cockpit_s& cfg) {
 bool isEnabled() { return g_enabled; }
 
 bool isConnected() { return g_enabled && g_connected; }
+
+bool isDriveEnabled() { return g_driveEnabled; }
 
 void sendCameraFrame() {
 #if defined(ENABLE_CAMERA)

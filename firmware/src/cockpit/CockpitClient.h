@@ -23,6 +23,10 @@ bool isEnabled();
 // WS 연결 상태. 미러 모드 분류 이관 분기에 사용.
 bool isConnected();
 
+// drive(차량 구동) 활성 여부(cockpit.drive=true로 TB6612 초기화됨).
+// GPIO2(AIN1)가 카메라 XCLK와 겹쳐 미러 모드와 상호 배제하기 위한 가드에 사용.
+bool isDriveEnabled();
+
 // 미러 모드용: 카메라 프레임(JPEG)을 즉시 캡처해 camera.frame 메시지로 큐잉한다.
 // 캡처/인코딩은 호출 스레드(미러 poll = 메인 루프)에서, 실제 송신은 WS 태스크에서.
 // 미연결이거나 직전 프레임 전송 중이면 드롭한다(전송 중 프레임 1장만 유지).

@@ -5,6 +5,9 @@
 #if defined(ENABLE_CAMERA)
 #include "driver/Camera.h"
 #endif
+#if defined(ENABLE_COCKPIT)
+#include "cockpit/CockpitClient.h"
+#endif
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -18,6 +21,19 @@ bool isOn(void){ return mirrorOn; }
 void set(bool on){ mirrorOn = on; }
 
 void toggle(void){
+#if defined(ENABLE_COCKPIT)
+  // 상호 배제: drive(주행) 활성 개체에선 미러 모드 진입 금지.
+  // AIN1=GPIO2가 카메라 XCLK와 동일 핀이라 동시 사용 시 충돌하기 때문.
+  // 켜려는 시도만 차단하고(여기서 camera_init이 호출되지 않도록 조기 반환),
+  // 이미 켜진 걸 끄는 건 통과시킨다.
+  if(!mirrorOn && cockpit::isDriveEnabled()){
+    Serial.println("[cockpit] mirror blocked: drive mode active (GPIO2 shared with camera XCLK)");
+    avatar.setSpeechText("주행 모드에선 미러 모드를 쓸 수 없어요");
+    delay(1500);
+    avatar.setSpeechText("");
+    return;
+  }
+#endif
   mirrorOn = !mirrorOn;
 #if defined(ENABLE_CAMERA)
   if(mirrorOn){
