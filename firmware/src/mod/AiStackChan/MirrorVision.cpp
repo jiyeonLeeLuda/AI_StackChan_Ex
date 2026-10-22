@@ -11,6 +11,9 @@
 #include <WiFiClientSecure.h>
 #include "driver/Camera.h"
 #endif
+#if defined(ENABLE_COCKPIT)
+#include "cockpit/CockpitClient.h"
+#endif
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -157,6 +160,23 @@ void poll(void){
   if (!MirrorState::isOn()) {
     return;
   }
+
+#if defined(ENABLE_COCKPIT)
+  // cockpit 연결 시: 온디바이스 클라우드 분류(TLS)를 완전히 스킵하고 카메라 프레임을
+  // cockpit 서버로 보낸다. 서버가 분류 후 sequence로 리액션을 내려보내며, 이는
+  // CockpitClient의 기존 sequence 경로가 재생한다. 분류용 TLS 경로가 사라져
+  // 내부 RAM 압박(HeapGuard 발동 원인)이 구조적으로 해소된다.
+  // cockpit 미연결이면 아래 기존 온디바이스 분류로 폴백한다.
+  if (cockpit::isConnected()) {
+    static uint32_t lastFrameMs = 0;
+    uint32_t now = millis();
+    if (now - lastFrameMs >= POLL_INTERVAL_MS) {   // 기존 2.5s 주기 유지(≥2s)
+      lastFrameMs = now;
+      cockpit::sendCameraFrame();
+    }
+    return;
+  }
+#endif
 
   // apply a finished classification (fast, runs on the main loop)
   if (state == State::ResultReady) {

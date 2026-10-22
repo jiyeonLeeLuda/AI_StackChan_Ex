@@ -26,5 +26,10 @@ extern void camera_deinit(void);
 extern bool camera_capture_and_face_detect(void);
 extern void camera_capture_preview(void);   // preview refresh only, no face detect
 extern bool camera_capture_base64(String& out);
+// camera_capture_base64와 동일한 캡처/JPEG 경로(frame2jpg)를 재사용하되, base64
+// String(내부 RAM)을 만들지 않고 원본 JPEG 버퍼와 해상도만 돌려준다. 호출자가
+// base64 인코딩 대상 버퍼(PSRAM 등)를 직접 고를 수 있게 하기 위함. 성공 시
+// *jpg_buf는 malloc된 버퍼이며 호출자가 free() 해야 한다.
+extern bool camera_capture_jpeg(uint8_t** jpg_buf, size_t* jpg_len, int* width, int* height);
 
 #endif //_CAMERA_H_

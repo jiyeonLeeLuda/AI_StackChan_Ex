@@ -7,7 +7,7 @@
 
 // 조종실(cockpit) WebSocket 클라이언트.
 // 서버(ws://host:port/robot)와 JSON 텍스트 프레임으로 통신한다.
-//   송신: hello / state(5초 주기) / touch
+//   송신: hello / state(5초 주기) / touch / camera.frame(미러 모드)
 //   수신: hello.ack / sequence / tts.chunk / listen / drive
 // 프로토콜 정본: packages/protocol/src/index.ts (v0)
 namespace cockpit {
@@ -19,6 +19,15 @@ void begin(const cockpit_s& cfg);
 
 // 활성화 여부(host 설정됨 + begin 성공).
 bool isEnabled();
+
+// WS 연결 상태. 미러 모드 분류 이관 분기에 사용.
+bool isConnected();
+
+// 미러 모드용: 카메라 프레임(JPEG)을 즉시 캡처해 camera.frame 메시지로 큐잉한다.
+// 캡처/인코딩은 호출 스레드(미러 poll = 메인 루프)에서, 실제 송신은 WS 태스크에서.
+// 미연결이거나 직전 프레임 전송 중이면 드롭한다(전송 중 프레임 1장만 유지).
+// ENABLE_CAMERA가 없으면 아무 것도 하지 않는다.
+void sendCameraFrame();
 
 // 디스플레이 터치 좌표를 존(center/forehead/left-edge/right-edge)으로 매핑해
 // touch 이벤트를 송신한다. loop() 컨텍스트에서 호출 가능(실제 송신은 내부 태스크에서).

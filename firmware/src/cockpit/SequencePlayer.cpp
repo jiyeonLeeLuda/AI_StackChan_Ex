@@ -87,6 +87,9 @@ void SequencePlayer::tick() {
   _idx++;
   if (_idx >= _nSteps) {
     _playing = false;
+    // 마지막 스텝 표정이 화면에 영구히 남지 않도록 Neutral로 복귀시킨다.
+    // 서보는 건드리지 않음(기존 5초 주기 moveToOrigin이 원위치 처리).
+    avatar.setExpression(Expression::Neutral);
     avatar.setSpeechText("");   // 말풍선 정리
     return;
   }

@@ -250,7 +250,36 @@ bool camera_capture_base64(String& out)
 
   free(jpg_buf);
   jpg_buf = NULL;
-  
+
+  return true;
+}
+
+
+// camera_capture_base64()에서 base64 String 생성 부분만 뺀 버전.
+// cockpit camera.frame 전송처럼 base64를 PSRAM 버퍼에 직접 넣고 싶을 때 사용한다.
+bool camera_capture_jpeg(uint8_t** jpg_buf, size_t* jpg_len, int* width, int* height)
+{
+  M5.In_I2C.release();
+  camera_fb_t *fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("Camera Capture Failed");
+    return false;
+  }
+
+  if (width)  *width  = fb->width;
+  if (height) *height = fb->height;
+
+  uint8_t *buf = NULL;
+  size_t   len = 0;
+  bool jpeg_converted = frame2jpg(fb, 80, &buf, &len);   // 기존과 동일한 품질(80)
+  esp_camera_fb_return(fb);
+  if (!jpeg_converted) {
+    Serial.println("JPEG compression failed");
+    return false;
+  }
+
+  *jpg_buf = buf;
+  *jpg_len = len;
   return true;
 }
 

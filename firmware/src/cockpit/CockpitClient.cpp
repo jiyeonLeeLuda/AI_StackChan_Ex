@@ -13,6 +13,12 @@
 #include "SpiRamJsonDocument.h"
 #include "Robot.h"
 #include "share/Version.h"
+#include "mod/AiStackChan/MirrorState.h"
+
+#if defined(ENABLE_CAMERA)
+#include "driver/Camera.h"
+#include "mbedtls/base64.h"
+#endif
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -47,6 +53,17 @@ const size_t TTS_BUF_SIZE = 64 * 1024;
 uint8_t* g_ttsBuf[2] = { nullptr, nullptr };
 int      g_ttsBufIdx = 0;
 
+#if defined(ENABLE_CAMERA)
+// camera.frame 전송용 PSRAM 스테이징 버퍼. 완성된 JSON 메시지 전체(프리픽스 +
+// base64 + 서픽스)를 담는다. 메인 루프가 채우고 WS 태스크가 sendTXT 한다.
+// VGA(640x480) JPEG q80 ≈ 수십 KB, base64는 그 4/3. 128KB면 충분하며 초과 시 드롭.
+const size_t FRAME_BUF_SIZE = 128 * 1024;
+char*            g_frameBuf = nullptr;
+volatile size_t  g_frameLen = 0;
+volatile bool    g_framePending = false;   // true면 태스크가 전송할 프레임 대기 중
+uint32_t         g_frameSeq = 0;
+#endif
+
 // libb64 base64 디코드. 반환값은 디코드된 바이트 수.
 int b64decode(const char* input, uint8_t* output) {
   base64_decodestate s;
@@ -55,8 +72,9 @@ int b64decode(const char* input, uint8_t* output) {
 }
 
 const char* modeStr() {
-  if (M5.Speaker.isPlaying()) return "speaking";
-  if (g_listening)            return "listening";
+  if (M5.Speaker.isPlaying())  return "speaking";
+  if (g_listening)             return "listening";
+  if (MirrorState::isOn())     return "mirror";
   return "idle";
 }
 
@@ -191,6 +209,13 @@ void taskLoop(void*) {
         g_pendingTouch = -1;
         sendTouch(tz);
       }
+#if defined(ENABLE_CAMERA)
+      // 메인 루프에서 스테이징된 camera.frame 송신(미러 모드)
+      if (g_framePending) {
+        g_ws.sendTXT((uint8_t*)g_frameBuf, g_frameLen);
+        g_framePending = false;
+      }
+#endif
       // 주기적 state
       uint32_t now = millis();
       if (now - g_lastStateMs >= STATE_INTERVAL_MS) {
@@ -229,6 +254,14 @@ void begin(const cockpit_s& cfg) {
     }
   }
 
+#if defined(ENABLE_CAMERA)
+  // camera.frame 스테이징 버퍼(PSRAM). 실패해도 cockpit 자체는 동작(프레임만 비활성).
+  g_frameBuf = (char*)heap_caps_malloc(FRAME_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  if (g_frameBuf == nullptr) {
+    Serial.println("[cockpit] frame buffer alloc failed; camera.frame disabled");
+  }
+#endif
+
   g_ws.begin(g_host.c_str(), g_port, "/robot");
   g_ws.onEvent(onWsEvent);
   g_ws.setReconnectInterval(5000);   // 끊기면 5초 백오프 후 재접속
@@ -239,6 +272,51 @@ void begin(const cockpit_s& cfg) {
 }
 
 bool isEnabled() { return g_enabled; }
+
+bool isConnected() { return g_enabled && g_connected; }
+
+void sendCameraFrame() {
+#if defined(ENABLE_CAMERA)
+  if (!g_enabled || !g_connected || g_frameBuf == nullptr) return;
+  if (g_framePending) return;   // 직전 프레임 전송 중이면 드롭(1장만 유지)
+
+  uint8_t* jpg = nullptr;
+  size_t   jpgLen = 0;
+  int      w = 0, h = 0;
+  if (!camera_capture_jpeg(&jpg, &jpgLen, &w, &h) || jpg == nullptr) {
+    Serial.println("[cockpit] camera.frame capture failed");
+    return;
+  }
+
+  // JSON 메시지를 PSRAM 스테이징 버퍼에 직접 조립(내부 RAM 압박 방지):
+  //   {"type":"camera.frame","seq":N,"width":W,"height":H,"data":"<base64>"}
+  int headLen = snprintf(g_frameBuf, FRAME_BUF_SIZE,
+      "{\"type\":\"camera.frame\",\"seq\":%u,\"width\":%d,\"height\":%d,\"data\":\"",
+      (unsigned)g_frameSeq, w, h);
+  if (headLen < 0 || (size_t)headLen + 4 >= FRAME_BUF_SIZE) {
+    free(jpg);
+    return;
+  }
+
+  // base64를 헤더 뒤에 바로 인코딩(서픽스 2바이트 + 여유 확보).
+  size_t b64len = 0;
+  int rc = mbedtls_base64_encode((unsigned char*)(g_frameBuf + headLen),
+                                 FRAME_BUF_SIZE - headLen - 4, &b64len,
+                                 jpg, jpgLen);
+  free(jpg);
+  if (rc != 0) {
+    Serial.printf("[cockpit] camera.frame too large (jpg=%u bytes), dropped\n", (unsigned)jpgLen);
+    return;
+  }
+
+  size_t pos = (size_t)headLen + b64len;
+  g_frameBuf[pos++] = '"';
+  g_frameBuf[pos++] = '}';
+  g_frameLen = pos;
+  g_frameSeq++;
+  g_framePending = true;   // WS 태스크가 송신
+#endif
+}
 
 void notifyTouch(int16_t x, int16_t y) {
   if (!g_enabled) return;
