@@ -87,6 +87,15 @@ typedef struct ModuleLLMConf {
     int8_t txPin;
 } moduleLLM_s;
 
+#if defined(ENABLE_COCKPIT)
+// cockpit(조종실) WebSocket 서버 접속 설정. host가 비어있으면 cockpit 모드 비활성.
+typedef struct CockpitConf {
+    String host;        // cockpit 서버 호스트(IP/도메인). 비어있으면 cockpit 완전 비활성.
+    uint16_t port;      // 포트. 미설정 시 3001.
+    String robotId;     // hello.robotId. 미설정 시 "stackchan-cores3".
+} cockpit_s;
+#endif
+
 typedef struct ExConfig {
     llm_s llm;
     tts_s tts;
@@ -94,6 +103,9 @@ typedef struct ExConfig {
     wakeword_s wakeword;
     audio_s audio;
     moduleLLM_s moduleLLM;
+#if defined(ENABLE_COCKPIT)
+    cockpit_s cockpit;
+#endif
 } ex_config_s;
 
 

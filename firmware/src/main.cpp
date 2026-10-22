@@ -46,6 +46,10 @@
 
 #include "WebAPI.h"
 
+#if defined(ENABLE_COCKPIT)
+#include "cockpit/CockpitClient.h"
+#endif
+
 #if defined( ENABLE_CAMERA )
 #include "driver/Camera.h"
 #endif    //ENABLE_CAMERA
@@ -840,6 +844,13 @@ void setup()
   Serial.printf("Speaker volume (set): %d\n", robot->spk_volume);
   M5.Speaker.setVolume(robot->spk_volume);
 
+#if defined(ENABLE_COCKPIT)
+  // cockpit(조종실) 서버 접속. host 미설정이거나 오프라인이면 내부적으로 비활성 처리.
+  if(!isOffline){
+    cockpit::begin(system_config.getExConfig().cockpit);
+  }
+#endif
+
 #if defined(ENABLE_CAMERA)
   // KR fork: the camera is initialized lazily when mirror mode turns ON.
   // An initialized camera streams DVP frames via DMA continuously (cam_hal
@@ -943,6 +954,9 @@ void loop()
     if (t.wasPressed())
     {
       mod->display_touched(t.x, t.y);
+#if defined(ENABLE_COCKPIT)
+      cockpit::notifyTouch(t.x, t.y);   // 터치 존을 cockpit 서버로 송신(활성 시)
+#endif
     }
 
     // M5Unified 0.1.x has no wasFlicked(); approximate a flick as a released

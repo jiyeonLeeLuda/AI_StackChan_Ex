@@ -342,6 +342,22 @@ void StackchanExConfig::setExtendSettings(DynamicJsonDocument doc)
     _ex_parameters.moduleLLM.rxPin  = doc["moduleLLM"]["rxPin"].as<int>();
     _ex_parameters.moduleLLM.txPin  = doc["moduleLLM"]["txPin"].as<int>();
 
+#if defined(ENABLE_COCKPIT)
+    // cockpit 서버 설정. host 미설정이면 CockpitClient가 비활성 처리한다.
+    _ex_parameters.cockpit.host = doc["cockpit"]["host"].as<String>();
+    if(_ex_parameters.cockpit.host == "null"){
+        _ex_parameters.cockpit.host = "";
+    }
+    _ex_parameters.cockpit.port = doc["cockpit"]["port"].as<int>();
+    if(_ex_parameters.cockpit.port == 0){
+        _ex_parameters.cockpit.port = 3001;
+    }
+    _ex_parameters.cockpit.robotId = doc["cockpit"]["robotId"].as<String>();
+    if(_ex_parameters.cockpit.robotId.length() == 0 || _ex_parameters.cockpit.robotId == "null"){
+        _ex_parameters.cockpit.robotId = "stackchan-cores3";
+    }
+#endif
+
 }
 
 void StackchanExConfig::printExtParameters(void)
@@ -386,5 +402,11 @@ void StackchanExConfig::printExtParameters(void)
 
     M5_LOGI("module llm rxPin: %d", _ex_parameters.moduleLLM.rxPin);
     M5_LOGI("module llm txPin: %d", _ex_parameters.moduleLLM.txPin);
-    
+
+#if defined(ENABLE_COCKPIT)
+    M5_LOGI("cockpit host: %s", _ex_parameters.cockpit.host.length() > 0 ? _ex_parameters.cockpit.host.c_str() : "(none)");
+    M5_LOGI("cockpit port: %d", _ex_parameters.cockpit.port);
+    M5_LOGI("cockpit robotId: %s", _ex_parameters.cockpit.robotId.c_str());
+#endif
+
 }
