@@ -1,5 +1,6 @@
 #include "WinkEye.h"
 #include "CoolGlasses.h"
+#include "EyeFX.h"
 
 namespace WinkFace {
 
@@ -15,6 +16,7 @@ void WinkEye::draw(M5Canvas* spi, m5avatar::BoundingRect rect,
     CoolFace::drawLens(spi, rect, ctx);
     return;
   }
+  if (EyeFX::draw(spi, rect, ctx)) return;   // 눈 이펙트 (O·K / N·O / 확대·축소)
   if (!winking) {
     inner.draw(spi, rect, ctx);
     return;

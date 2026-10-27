@@ -5,6 +5,7 @@
 #include <Avatar.h>
 #include "Robot.h"
 #include "../mod/AiStackChan/CoolGlasses.h"
+#include "../mod/AiStackChan/EyeFX.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -29,6 +30,7 @@ static const int EXPR_COOL = 100;
 
 static int mapExpression(const String& e) {
   if (e == "cool")      return EXPR_COOL;
+  if (e == "angry")     return (int)Expression::Angry;
   if (e == "happy")     return (int)Expression::Happy;
   if (e == "surprised") return (int)Expression::Doubt;
   if (e == "wink")      return (int)Expression::Happy;
@@ -67,6 +69,7 @@ void SequencePlayer::start(const String& id, JsonArrayConst steps) {
     }
     d.hasText     = st.containsKey("text");
     d.text        = d.hasText ? st["text"].as<String>() : String();
+    d.sound       = st.containsKey("sound") ? st["sound"].as<String>() : String();
     d.durationMs  = st["durationMs"].as<uint32_t>();  // 필수 필드
     _nSteps++;
   }
@@ -96,6 +99,7 @@ void SequencePlayer::tick() {
     // 서보는 건드리지 않음(기존 5초 주기 moveToOrigin이 원위치 처리).
     avatar.setExpression(Expression::Neutral);
     avatar.setSpeechText("");   // 말풍선 정리
+    EyeFX::set(EyeFX::Mode::None);   // 눈 이펙트도 복귀 (선글라스는 별개 — 유지)
     return;
   }
   _stepStartMs = now;
@@ -103,12 +107,24 @@ void SequencePlayer::tick() {
 }
 
 void SequencePlayer::applyStep(const Step& s) {
+  // 선글라스는 표정과 독립인 오버레이: "cool"로 쓰고, sound:"glasses-off"로만 벗는다.
+  // 다른 표정(리액션·대화 감정)이 와도 렌즈는 유지 — 입 모양으로 감정을 표현한다.
+  if (s.sound == "glasses-off") {
+    CoolFace::setCool(false);
+  }
+  // 눈 이펙트 마커 — 시퀀스 종료 시 자동으로 None 복귀 (tick 참조)
+  else if (s.sound == "eyes-ok")     EyeFX::set(EyeFX::Mode::LetterOK);
+  else if (s.sound == "eyes-no")     EyeFX::set(EyeFX::Mode::LetterNO);
+  else if (s.sound == "eyes-big")    EyeFX::set(EyeFX::Mode::Big);
+  else if (s.sound == "eyes-small")  EyeFX::set(EyeFX::Mode::Small);
+  else if (s.sound == "eyes-normal") EyeFX::set(EyeFX::Mode::None);
   if (s.hasExpression) {
-    // 선글라스는 표정 스텝에서만 토글: "cool"이면 쓰고, 다른 표정이면 벗는다.
-    // 시퀀스 종료의 Neutral 복귀는 여기를 거치지 않으므로 주행모드 동안 유지된다.
-    CoolFace::setCool(s.expression == EXPR_COOL);
-    avatar.setExpression(s.expression == EXPR_COOL ? Expression::Neutral
-                                                   : (Expression)s.expression);
+    if (s.expression == EXPR_COOL) {
+      CoolFace::setCool(true);
+      avatar.setExpression(Expression::Neutral);
+    } else {
+      avatar.setExpression((Expression)s.expression);
+    }
   }
 #ifdef USE_SERVO
   if (s.hasServo && robot != nullptr && robot->servo != nullptr) {

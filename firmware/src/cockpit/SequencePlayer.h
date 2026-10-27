@@ -30,6 +30,7 @@ private:
     int      servoMs;      // 목표각까지 이동 시간
     bool     hasText;
     String   text;
+    String   sound;        // 효과음/제어 마커 id ("glasses-off" 등). 빈 문자열 = 없음
     uint32_t durationMs;
   };
 

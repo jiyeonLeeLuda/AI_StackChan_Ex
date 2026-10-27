@@ -1,4 +1,5 @@
 #include "CoolGlasses.h"
+#include "EyeFX.h"
 
 namespace CoolFace {
 
@@ -41,11 +42,12 @@ void drawLens(M5Canvas* spi, m5avatar::BoundingRect rect,
 
 void CoolEye::draw(M5Canvas* spi, m5avatar::BoundingRect rect,
                    m5avatar::DrawContext* ctx) {
-  if (!cool) {
-    inner.draw(spi, rect, ctx);
+  if (cool) {           // 선글라스가 최우선
+    drawLens(spi, rect, ctx);
     return;
   }
-  drawLens(spi, rect, ctx);
+  if (EyeFX::draw(spi, rect, ctx)) return;   // 눈 이펙트 (O·K / N·O / 확대·축소)
+  inner.draw(spi, rect, ctx);
 }
 
 void install(m5avatar::Avatar& avatar) {
