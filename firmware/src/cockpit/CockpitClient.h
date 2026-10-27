@@ -33,6 +33,16 @@ bool isDriveEnabled();
 // ENABLE_CAMERA가 없으면 아무 것도 하지 않는다.
 void sendCameraFrame();
 
+// FPV 주행 뷰: on이면 WS 태스크가 일정 간격(FPV_INTERVAL_MS)으로 camera.frame을
+// 자동 캡처·송신한다. 서버의 sound 마커 "fpv-on"/"fpv-off"(착좌/하차 씬)로 토글.
+// 미러 모드와 독립 — 탑승모드에선 스타키가 앞을 보므로 1인칭 주행 뷰가 된다.
+void setFpvStreaming(bool on);
+bool isFpvStreaming();
+
+// FPV 프레임 캡처 펌프 — 메인 루프에서 매 iteration 호출(자가 게이팅). 미러 poll처럼
+// 캡처/인코딩을 메인 루프 컨텍스트에서 수행해 WS 태스크(데드맨 tick 포함)를 막지 않는다.
+void fpvPoll();
+
 // 음성 턴: 마이크를 캡처(기존 AudioWhisper 경로, 16kHz PCM16 mono, 3.0s)해
 // audio.chunk로 서버에 전송하고 응답(tts.chunk/sequence) 대기 상태로 전환한다.
 // 캡처는 호출 스레드(발화 트리거 = 모드 idle)에서 블로킹으로 수행. 재생 중이거나

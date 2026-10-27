@@ -12,6 +12,7 @@
 #include "libb64/cdecode.h"
 
 #include "SpiRamJsonDocument.h"
+#include "../mod/AiStackChan/MirrorState.h"
 #include "Robot.h"
 #include "share/Version.h"
 #include "share/Mutex.h"
@@ -67,6 +68,9 @@ char*            g_frameBuf = nullptr;
 volatile size_t  g_frameLen = 0;
 volatile bool    g_framePending = false;   // true면 태스크가 전송할 프레임 대기 중
 uint32_t         g_frameSeq = 0;
+volatile bool    g_fpvStreaming = false;   // FPV 주행 뷰: 주기 자동 캡처 on/off
+uint32_t         g_lastFpvMs = 0;
+const uint32_t   FPV_INTERVAL_MS = 200;     // 5fps 목표 (카메라·Wi-Fi 한계로 실측은 더 낮을 수 있음)
 #endif
 
 // audio.chunk 전송용 PSRAM 스테이징 버퍼(camera.frame과 동일 SPSC 패턴).
@@ -286,7 +290,9 @@ void taskLoop(void*) {
         sendTouch(tz);
       }
 #if defined(ENABLE_CAMERA)
-      // 메인 루프에서 스테이징된 camera.frame 송신(미러 모드)
+      // 스테이징된 camera.frame 송신(FPV 또는 미러 모드). sendTXT만 — 캡처/인코딩은
+      // 메인 루프(fpvPoll/미러 poll)에서 한다. WS 태스크엔 데드맨 tick도 있어
+      // 느린 VGA 캡처를 여기서 돌리면 안전 정지가 지연된다.
       if (g_framePending) {
         g_ws.sendTXT((uint8_t*)g_frameBuf, g_frameLen);
         g_framePending = false;
@@ -418,6 +424,38 @@ void sendCameraFrame() {
   g_frameLen = pos;
   g_frameSeq++;
   g_framePending = true;   // WS 태스크가 송신
+#endif
+}
+
+void setFpvStreaming(bool on) {
+#if defined(ENABLE_CAMERA)
+  g_fpvStreaming = on;
+  g_lastFpvMs = 0;   // 즉시 1장 캡처되도록
+  Serial.printf("[cockpit] FPV streaming %s\n", on ? "ON" : "OFF");
+#else
+  (void)on;
+#endif
+}
+
+// FPV 캡처는 메인 루프에서 (미러 poll과 동일 컨텍스트). 느린 VGA 캡처를 WS 태스크에서
+// 돌리지 않기 위함. 연결·스트리밍 상태 + 인터벌을 자가 판단하므로 매 루프 호출해도 안전.
+void fpvPoll() {
+#if defined(ENABLE_CAMERA)
+  if (!g_fpvStreaming || !g_connected) return;
+  // 미러 모드가 켜져 있으면 미러 poll이 이미 프레임을 올리므로(중계됨) 이중 캡처 스킵.
+  if (MirrorState::isOn()) return;
+  uint32_t now = millis();
+  if (now - g_lastFpvMs < FPV_INTERVAL_MS) return;
+  g_lastFpvMs = now;
+  sendCameraFrame();   // 캡처·인코딩·스테이징 (전송은 WS 태스크)
+#endif
+}
+
+bool isFpvStreaming() {
+#if defined(ENABLE_CAMERA)
+  return g_fpvStreaming;
+#else
+  return false;
 #endif
 }
 

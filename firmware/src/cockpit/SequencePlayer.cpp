@@ -6,6 +6,7 @@
 #include "Robot.h"
 #include "../mod/AiStackChan/CoolGlasses.h"
 #include "../mod/AiStackChan/EyeFX.h"
+#include "CockpitClient.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -118,6 +119,9 @@ void SequencePlayer::applyStep(const Step& s) {
   else if (s.sound == "eyes-big")    EyeFX::set(EyeFX::Mode::Big);
   else if (s.sound == "eyes-small")  EyeFX::set(EyeFX::Mode::Small);
   else if (s.sound == "eyes-normal") EyeFX::set(EyeFX::Mode::None);
+  // FPV 주행 뷰 스트리밍 토글 (착좌/하차 씬)
+  else if (s.sound == "fpv-on")      cockpit::setFpvStreaming(true);
+  else if (s.sound == "fpv-off")     cockpit::setFpvStreaming(false);
   if (s.hasExpression) {
     if (s.expression == EXPR_COOL) {
       CoolFace::setCool(true);

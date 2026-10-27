@@ -912,6 +912,11 @@ void loop()
   //get_elapsed_time_micro("loop() start");
   M5.update();
   //get_elapsed_time_micro("M5.update time");
+
+  // FPV 주행 뷰: 스트리밍 on일 때만 메인 루프에서 프레임 캡처(자가 게이팅).
+  // 미러 캡처와 동일 컨텍스트 — WS 태스크(데드맨 tick 포함)를 막지 않는다.
+  cockpit::fpvPoll();
+
   ModBase* mod = get_current_mod();
   if(mod == nullptr){
     if(isWebServerEnabled){
