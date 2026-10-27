@@ -1,3 +1,8 @@
+> **🚚 스낵 익스프레스 포크 (feature/cockpit-ws)**
+> 이 브랜치는 조종실 서버(씬 클라이언트)에 붙는 개조본입니다 — WS 클라이언트, 미러모드 서버 이관,
+> 주행모드 선글라스/EyeFX 연출. 조종실·차량 펌웨어·제작 가이드는 👉 [jiyeonLeeLuda/ai-rc-bot](https://github.com/jiyeonLeeLuda/ai-rc-bot)
+> (원본: [ronron-gh/AI_StackChan_Ex](https://github.com/ronron-gh/AI_StackChan_Ex), MIT)
+
 [English](README_en.md)
 
 # AI Stack-chan Ex
