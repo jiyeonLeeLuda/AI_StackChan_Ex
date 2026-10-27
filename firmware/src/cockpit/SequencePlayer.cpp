@@ -4,6 +4,7 @@
 #include <M5Unified.h>
 #include <Avatar.h>
 #include "Robot.h"
+#include "../mod/AiStackChan/CoolGlasses.h"
 
 using namespace m5avatar;
 extern Avatar avatar;
@@ -23,7 +24,11 @@ namespace cockpit {
 //   dizzy     → Doubt    (@_@: 혼란)
 //   sad       → Sad
 //   sleepy    → Sleepy
+// "cool"(😎 선글라스)은 avatar enum 밖의 특수값 — applyStep에서 CoolFace로 처리.
+static const int EXPR_COOL = 100;
+
 static int mapExpression(const String& e) {
+  if (e == "cool")      return EXPR_COOL;
   if (e == "happy")     return (int)Expression::Happy;
   if (e == "surprised") return (int)Expression::Doubt;
   if (e == "wink")      return (int)Expression::Happy;
@@ -99,7 +104,11 @@ void SequencePlayer::tick() {
 
 void SequencePlayer::applyStep(const Step& s) {
   if (s.hasExpression) {
-    avatar.setExpression((Expression)s.expression);
+    // 선글라스는 표정 스텝에서만 토글: "cool"이면 쓰고, 다른 표정이면 벗는다.
+    // 시퀀스 종료의 Neutral 복귀는 여기를 거치지 않으므로 주행모드 동안 유지된다.
+    CoolFace::setCool(s.expression == EXPR_COOL);
+    avatar.setExpression(s.expression == EXPR_COOL ? Expression::Neutral
+                                                   : (Expression)s.expression);
   }
 #ifdef USE_SERVO
   if (s.hasServo && robot != nullptr && robot->servo != nullptr) {

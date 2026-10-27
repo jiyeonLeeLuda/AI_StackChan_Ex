@@ -19,6 +19,7 @@
 #include "mod/ModManager.h"
 #include "mod/ModBase.h"
 #include "mod/AiStackChan/WinkEye.h"
+#include "mod/AiStackChan/CoolGlasses.h"
 #include "mod/AiStackChan/MirrorState.h"
 #include "mod/AiStackChan/AiStackChanMod.h"
 #include "mod/AiStackChan/RealtimeAiMod.h"
@@ -829,6 +830,7 @@ void setup()
   }
 
   WinkFace::install(avatar);   // winkable right eye (mirror-mode wink reaction)
+  CoolFace::install(avatar);   // sunglasses-capable left eye (driving mode)
 
   avatar.addTask(lipSync, "lipSync", 2048, 2);
   avatar.addTask(servo, "servo", 2048);

@@ -1,4 +1,5 @@
 #include "WinkEye.h"
+#include "CoolGlasses.h"
 
 namespace WinkFace {
 
@@ -9,6 +10,11 @@ bool isWinking(void){ return winking; }
 
 void WinkEye::draw(M5Canvas* spi, m5avatar::BoundingRect rect,
                    m5avatar::DrawContext* ctx){
+  // 선글라스 모드가 윙크보다 우선 — 오른눈 렌즈는 여기서 그린다 (왼눈은 CoolEye).
+  if (CoolFace::isCool()) {
+    CoolFace::drawLens(spi, rect, ctx);
+    return;
+  }
   if (!winking) {
     inner.draw(spi, rect, ctx);
     return;
