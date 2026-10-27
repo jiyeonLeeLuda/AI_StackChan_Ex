@@ -13,6 +13,7 @@
 
 #include "SpiRamJsonDocument.h"
 #include "../mod/AiStackChan/MirrorState.h"
+#include "../driver/Camera.h"
 #include "Robot.h"
 #include "share/Version.h"
 #include "share/Mutex.h"
@@ -69,6 +70,7 @@ volatile size_t  g_frameLen = 0;
 volatile bool    g_framePending = false;   // true면 태스크가 전송할 프레임 대기 중
 uint32_t         g_frameSeq = 0;
 volatile bool    g_fpvStreaming = false;   // FPV 주행 뷰: 주기 자동 캡처 on/off
+bool             g_fpvOwnsCamera = false;   // FPV가 camera_init을 호출했는가(미러와 소유권 조율)
 uint32_t         g_lastFpvMs = 0;
 const uint32_t   FPV_INTERVAL_MS = 200;     // 5fps 목표 (카메라·Wi-Fi 한계로 실측은 더 낮을 수 있음)
 #endif
@@ -429,9 +431,12 @@ void sendCameraFrame() {
 
 void setFpvStreaming(bool on) {
 #if defined(ENABLE_CAMERA)
+  // 의도만 설정. 실제 camera_init/deinit은 fpvPoll(메인 루프)에서 — I2C/SCCB를
+  // 쓰는 camera_init을 WS 태스크(여기)에서 호출하면 메인 루프 I2C와 충돌해
+  // "Camera probe failed"가 난다(실측). 미러모드도 메인 루프에서 init 한다.
   g_fpvStreaming = on;
   g_lastFpvMs = 0;   // 즉시 1장 캡처되도록
-  Serial.printf("[cockpit] FPV streaming %s\n", on ? "ON" : "OFF");
+  Serial.printf("[cockpit] FPV streaming %s (requested)\n", on ? "ON" : "OFF");
 #else
   (void)on;
 #endif
@@ -441,6 +446,22 @@ void setFpvStreaming(bool on) {
 // 돌리지 않기 위함. 연결·스트리밍 상태 + 인터벌을 자가 판단하므로 매 루프 호출해도 안전.
 void fpvPoll() {
 #if defined(ENABLE_CAMERA)
+  // --- 카메라 소유권 조율 (전부 메인 루프 컨텍스트 — I2C 안전) ---
+  // 미러가 쥐고 있으면 FPV는 init 안 하고, 미러 off 시 FPV가 직접 init/deinit.
+  // 스타키는 drive 비활성이라 GPIO2 XCLK↔AIN1 충돌 없음(차량이 drive 담당).
+  if (g_fpvStreaming && !g_fpvOwnsCamera && !MirrorState::isOn()) {
+    if (camera_init() != ESP_OK) {
+      Serial.println("[cockpit] FPV: camera_init failed — 스트리밍 중단");
+      g_fpvStreaming = false;
+      return;
+    }
+    g_fpvOwnsCamera = true;
+    Serial.println("[cockpit] FPV: camera ready");
+  } else if (!g_fpvStreaming && g_fpvOwnsCamera && !MirrorState::isOn()) {
+    camera_deinit();
+    g_fpvOwnsCamera = false;
+  }
+
   if (!g_fpvStreaming || !g_connected) return;
   // 미러 모드가 켜져 있으면 미러 poll이 이미 프레임을 올리므로(중계됨) 이중 캡처 스킵.
   if (MirrorState::isOn()) return;

@@ -6,6 +6,7 @@
 #include "Camera.h"
 #include <SPIFFS.h>
 #include <base64.h>
+#include <esp_log.h>
 #include "DebugTools.h"
 using namespace m5avatar;
 extern Avatar avatar;
@@ -62,6 +63,11 @@ esp_err_t camera_init(void){
 
     sensor_t *s = esp_camera_sensor_get();
     s->set_hmirror(s, 0);        // 左右反転
+
+    // fb_count=1 + GRAB_WHEN_EMPTY에선 소비자(캡처)가 센서 프레임레이트보다 느리면
+    // HAL이 EV-EOF-OVF를 프레임마다 로깅한다. 기능상 무해(의도된 프레임 드롭)하지만
+    // 초당 수십 줄의 시리얼 로깅이 CPU를 잡아먹어 캡처 처리량을 떨어뜨린다 → 억제.
+    esp_log_level_set("cam_hal", ESP_LOG_NONE);
 
     return ESP_OK;
 }
