@@ -14,6 +14,7 @@
 #include "SpiRamJsonDocument.h"
 #include "../mod/AiStackChan/MirrorState.h"
 #include "../driver/Camera.h"
+#include <ESPmDNS.h>
 #include "Robot.h"
 #include "share/Version.h"
 #include "share/Mutex.h"
@@ -369,6 +370,27 @@ void begin(const cockpit_s& cfg) {
   g_audioBuf = (char*)heap_caps_malloc(AUDIO_BUF_SIZE, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   if (g_audioBuf == nullptr) {
     Serial.println("[cockpit] audio buffer alloc failed; audio.chunk disabled");
+  }
+
+  // 호스트가 ".local"이면 mDNS로 현재 IP를 해석한다. 맥 IP가 바뀌거나 네트워크(집↔
+  // 핫스팟)가 달라져도 SD의 cockpit.host를 안 고쳐도 된다 — 이름은 그대로. WebSocketsClient
+  // 내장 DNS는 .local을 못 풀어 직접 해석해 IP를 넘긴다. (WiFi 연결 후 호출 전제)
+  if (g_host.endsWith(".local")) {
+    String name = g_host.substring(0, g_host.length() - 6);   // ".local" 제거
+    MDNS.begin("snack-stacky");
+    Serial.printf("[cockpit] mDNS 해석 중: %s.local ...\n", name.c_str());
+    IPAddress ip;
+    for (int attempt = 0; attempt < 5; attempt++) {
+      ip = MDNS.queryHost(name.c_str(), 2000);
+      if (ip != IPAddress(0, 0, 0, 0)) break;
+      Serial.println("[cockpit] mDNS 재시도...");
+    }
+    if (ip != IPAddress(0, 0, 0, 0)) {
+      g_host = ip.toString();
+      Serial.printf("[cockpit] mDNS → %s\n", g_host.c_str());
+    } else {
+      Serial.println("[cockpit] mDNS 해석 실패 — 호스트 원문 사용(접속 안 될 수 있음)");
+    }
   }
 
   g_ws.begin(g_host.c_str(), g_port, "/robot");
