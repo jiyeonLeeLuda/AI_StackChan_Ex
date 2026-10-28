@@ -396,6 +396,8 @@ void begin(const cockpit_s& cfg) {
   g_ws.begin(g_host.c_str(), g_port, "/robot");
   g_ws.onEvent(onWsEvent);
   g_ws.setReconnectInterval(5000);   // 끊기면 5초 백오프 후 재접속
+  // WS 하트비트: 15초마다 ping → 핫스팟 idle 드랍 방지 + 죽은 연결 빠른 감지·재접속.
+  g_ws.enableHeartbeat(15000, 3000, 2);
 
   xTaskCreate(taskLoop, "cockpitTask", 8 * 1024, nullptr, 3, &g_taskH);
   g_enabled = true;
