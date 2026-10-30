@@ -42,7 +42,9 @@ bool                g_driveEnabled = false;   // cockpit.drive=true일 때만 tr
 SpiRamJsonDocument* g_rxDoc = nullptr;   // 수신 파싱용(tts.chunk base64 수용, PSRAM)
 TaskHandle_t        g_taskH = nullptr;
 
-String   g_host;
+String   g_host;                          // 현재 WS 타깃(해석된 IP 또는 리터럴)
+String   g_hostOriginal;                  // 설정 원문(.local 이름 등) — 재해석용
+uint32_t g_lastResolveMs = 0;             // 마지막 재해석 시각(끊김 중 주기 재해석)
 uint16_t g_port = 0;
 String   g_robotId;
 bool     g_enabled = false;
@@ -276,6 +278,16 @@ void onWsEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
+// 호스트가 ".local"이면 mDNS로 현재 IP를 해석해 반환. 아니면 원문 그대로.
+// 실패 시 빈 문자열. (WiFi 연결 상태에서 호출)
+static String resolveHostMDNS(const String& host) {
+  if (!host.endsWith(".local")) return host;
+  String name = host.substring(0, host.length() - 6);
+  IPAddress ip = MDNS.queryHost(name.c_str(), 2000);
+  if (ip != IPAddress(0, 0, 0, 0)) return ip.toString();
+  return String();   // 실패
+}
+
 // WebSocket 이벤트 처리 + 주기적 송신을 담당하는 전용 태스크.
 // loop()를 막지 않기 위해 분리했다(RealtimeLLMBase의 webSocketLoopTask 패턴).
 void taskLoop(void*) {
@@ -284,6 +296,21 @@ void taskLoop(void*) {
     g_ws.loop();
     g_seq.tick();     // 시퀀스 스텝 전환(비블로킹)
     g_drive.tick();   // 데드맨: drive ttl 만료 시 정지(연결 여부 무관하게 항상 체크)
+
+    // 끊긴 동안 8초마다 .local 재해석 — 맥 IP가 바뀌면(회사망 DHCP 재할당 등) 재부팅
+    // 없이 새 IP로 재타깃. WiFi 끊김은 코어 자동 재접속에 맡기고, 여기선 서버 IP만 추적.
+    if (!g_connected && g_hostOriginal.endsWith(".local") &&
+        WiFi.status() == WL_CONNECTED && millis() - g_lastResolveMs > 8000) {
+      g_lastResolveMs = millis();
+      String resolved = resolveHostMDNS(g_hostOriginal);
+      if (resolved.length() && resolved != g_host) {
+        Serial.printf("[cockpit] mDNS 재해석 → %s (이전 %s) 재타깃\n",
+                      resolved.c_str(), g_host.c_str());
+        g_host = resolved;
+        g_ws.disconnect();
+        g_ws.begin(g_host.c_str(), g_port, "/robot");   // 새 IP로 재시작
+      }
+    }
 
     if (g_connected) {
       // loop()에서 큐잉된 터치 송신
@@ -372,26 +399,27 @@ void begin(const cockpit_s& cfg) {
     Serial.println("[cockpit] audio buffer alloc failed; audio.chunk disabled");
   }
 
-  // 호스트가 ".local"이면 mDNS로 현재 IP를 해석한다. 맥 IP가 바뀌거나 네트워크(집↔
-  // 핫스팟)가 달라져도 SD의 cockpit.host를 안 고쳐도 된다 — 이름은 그대로. WebSocketsClient
-  // 내장 DNS는 .local을 못 풀어 직접 해석해 IP를 넘긴다. (WiFi 연결 후 호출 전제)
-  if (g_host.endsWith(".local")) {
-    String name = g_host.substring(0, g_host.length() - 6);   // ".local" 제거
+  // 호스트가 ".local"이면 mDNS로 현재 IP를 해석한다. 맥 IP가 바뀌거나 네트워크가
+  // 달라져도 SD의 cockpit.host를 안 고쳐도 된다 — 이름은 그대로. 원문은 g_hostOriginal에
+  // 보관해, 끊겼을 때 taskLoop에서 재해석(맥 IP 변경 시 재부팅 없이 새 IP로 재접속).
+  g_hostOriginal = g_host;
+  if (g_hostOriginal.endsWith(".local")) {
     MDNS.begin("snack-stacky");
-    Serial.printf("[cockpit] mDNS 해석 중: %s.local ...\n", name.c_str());
-    IPAddress ip;
+    Serial.printf("[cockpit] mDNS 해석 중: %s ...\n", g_hostOriginal.c_str());
+    String resolved;
     for (int attempt = 0; attempt < 5; attempt++) {
-      ip = MDNS.queryHost(name.c_str(), 2000);
-      if (ip != IPAddress(0, 0, 0, 0)) break;
+      resolved = resolveHostMDNS(g_hostOriginal);
+      if (resolved.length()) break;
       Serial.println("[cockpit] mDNS 재시도...");
     }
-    if (ip != IPAddress(0, 0, 0, 0)) {
-      g_host = ip.toString();
+    if (resolved.length()) {
+      g_host = resolved;
       Serial.printf("[cockpit] mDNS → %s\n", g_host.c_str());
     } else {
-      Serial.println("[cockpit] mDNS 해석 실패 — 호스트 원문 사용(접속 안 될 수 있음)");
+      Serial.println("[cockpit] mDNS 해석 실패 — 접속 후 재해석으로 복구 시도");
     }
   }
+  g_lastResolveMs = millis();
 
   g_ws.begin(g_host.c_str(), g_port, "/robot");
   g_ws.onEvent(onWsEvent);
